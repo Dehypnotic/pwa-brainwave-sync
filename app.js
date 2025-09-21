@@ -1,8 +1,8 @@
 // Brainwave Sync (Isochronic pulses) + Schedule canvas
 class BrainwaveIso {
-  constructor({carrierHz=400, startBeatHz=7, endBeatHz=4, rampSeconds=1800, holdSeconds=1800, depth=1.0, smooth=true, muted=false}) {
+  constructor({carrierHz=400, startBeatHz=7, endBeatHz=4, rampSeconds=1800, holdSeconds=1800, muted=false}) {
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    this.opts = {carrierHz, startBeatHz, endBeatHz, rampSeconds, holdSeconds, depth, smooth, muted};
+    this.opts = {carrierHz, startBeatHz, endBeatHz, rampSeconds, holdSeconds, muted};
     this.started = false;
     this.nodes = {};
   }
@@ -16,16 +16,13 @@ class BrainwaveIso {
     carrier.frequency.value = o.carrierHz;
 
     const outGain = ctx.createGain();
-    outGain.gain.value = o.muted ? 0 : 1;
+    outGain.gain.value = 0; // Start at 0 for fade-in
 
     const pulseGain = ctx.createGain();
     pulseGain.gain.value = 0;
 
-    const depthGain = ctx.createGain();
-    depthGain.gain.value = o.depth;
-
     const lfo = ctx.createOscillator();
-    lfo.type = o.smooth ? 'sine' : 'square';
+    lfo.type = 'square'; // Use square wave for 50% duty cycle
     lfo.frequency.setValueAtTime(o.startBeatHz, ctx.currentTime);
     lfo.frequency.linearRampToValueAtTime(o.endBeatHz, ctx.currentTime + o.rampSeconds);
 
@@ -34,9 +31,9 @@ class BrainwaveIso {
 
     const lfoLP = ctx.createBiquadFilter();
     lfoLP.type = 'lowpass';
-    lfoLP.frequency.value = o.smooth ? 20 : 20000;
+    lfoLP.frequency.value = 20; // Low value to round the square wave edges
 
-    lfo.connect(lfoLP).connect(lfoScale).connect(depthGain).connect(pulseGain.gain);
+    lfo.connect(lfoLP).connect(lfoScale).connect(pulseGain.gain);
     lfoBias.connect(pulseGain.gain);
 
     carrier.connect(pulseGain).connect(outGain).connect(ctx.destination);
@@ -45,7 +42,7 @@ class BrainwaveIso {
     lfo.start();
     carrier.start();
 
-    this.nodes = {carrier, outGain, pulseGain, depthGain, lfo, lfoBias, lfoLP};
+    this.nodes = {carrier, outGain, pulseGain, lfo, lfoBias, lfoLP};
     this.t0 = ctx.currentTime;
   }
 
@@ -54,7 +51,12 @@ class BrainwaveIso {
     if (this.ctx.state === 'suspended') this.ctx.resume();
     this._build();
     const t = this.ctx.currentTime;
-    try { this.nodes.pulseGain.gain.setTargetAtTime(this.opts.depth, t, 0.05); } catch {}
+    // Fade in the main output
+    try {
+      if (!this.opts.muted) {
+        this.nodes.outGain.gain.setTargetAtTime(1.0, t, 0.05);
+      }
+    } catch {}
     this.started = true;
   }
 
@@ -68,9 +70,13 @@ class BrainwaveIso {
     }, 200);
   }
 
-  setDepth(val) { if (this.nodes.depthGain) this.nodes.depthGain.gain.value = val; this.opts.depth = val; }
-  setMute(m)    { if (this.nodes.outGain) this.nodes.outGain.gain.value = m ? 0 : 1; this.opts.muted = m; }
-  setSmooth(s)  { this.opts.smooth = s; if (this.nodes.lfoLP) this.nodes.lfoLP.frequency.value = s ? 20 : 20000; if (this.nodes.lfo) this.nodes.lfo.type = s ? 'sine' : 'square'; }
+  setMute(m) {
+    this.opts.muted = m;
+    if (this.nodes.outGain) {
+      const targetGain = m ? 0 : 1;
+      try { this.nodes.outGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05); } catch {}
+    }
+  }
 
   beatAt(sec) {
     const {startBeatHz, endBeatHz, rampSeconds} = this.opts;
@@ -144,14 +150,10 @@ const getOpts = () => ({
   endBeatHz: +q('endBeat').value || 4,
   rampSeconds: (+q('rampMin').value || 30) * 60,
   holdSeconds: (+q('holdMin').value || 30) * 60,
-  depth: +q('depth').value,
-  smooth: q('smooth').checked,
   muted: q('mute').checked,
 });
 
-q('depth').addEventListener('input', e => { if (engine) engine.setDepth(+e.target.value); });
 q('mute').addEventListener('change', e => { if (engine) engine.setMute(e.target.checked); });
-q('smooth').addEventListener('change', e => { if (engine) engine.setSmooth(e.target.checked); });
 
 q('startBtn').onclick = async () => {
   try {
