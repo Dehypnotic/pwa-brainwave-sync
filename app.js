@@ -5,6 +5,7 @@ class BrainwaveIso {
     this.opts = {carrierHz, startBeatHz, endBeatHz, rampSeconds, holdSeconds, muted};
     this.started = false;
     this.nodes = {};
+    this.pulseTimer = null;
   }
 
   _build() {
@@ -19,30 +20,13 @@ class BrainwaveIso {
     outGain.gain.value = 0; // Start at 0 for fade-in
 
     const pulseGain = ctx.createGain();
-    pulseGain.gain.value = 0;
-
-    const lfo = ctx.createOscillator();
-    lfo.type = 'square'; // Use square wave for 50% duty cycle
-    lfo.frequency.setValueAtTime(o.startBeatHz, ctx.currentTime);
-    lfo.frequency.linearRampToValueAtTime(o.endBeatHz, ctx.currentTime + o.rampSeconds);
-
-    const lfoScale = ctx.createGain(); lfoScale.gain.value = 0.5;
-    const lfoBias  = ctx.createConstantSource(); lfoBias.offset.value = 0.5;
-
-    const lfoLP = ctx.createBiquadFilter();
-    lfoLP.type = 'lowpass';
-    lfoLP.frequency.value = 20; // Low value to round the square wave edges
-
-    lfo.connect(lfoLP).connect(lfoScale).connect(pulseGain.gain);
-    lfoBias.connect(pulseGain.gain);
+    pulseGain.gain.value = 0; // This will be controlled by the scheduler
 
     carrier.connect(pulseGain).connect(outGain).connect(ctx.destination);
 
-    lfoBias.start();
-    lfo.start();
     carrier.start();
 
-    this.nodes = {carrier, outGain, pulseGain, lfo, lfoBias, lfoLP};
+    this.nodes = {carrier, outGain, pulseGain};
     this.t0 = ctx.currentTime;
   }
 
@@ -51,23 +35,65 @@ class BrainwaveIso {
     if (this.ctx.state === 'suspended') this.ctx.resume();
     this._build();
     const t = this.ctx.currentTime;
-    // Fade in the main output
     try {
       if (!this.opts.muted) {
         this.nodes.outGain.gain.setTargetAtTime(1.0, t, 0.05);
       }
     } catch {}
     this.started = true;
+    this.schedulePulses(this.ctx.currentTime);
   }
 
   stop() {
     if (!this.started) return;
+    this.started = false; // Stop the scheduler loop
+    if (this.pulseTimer) {
+      clearTimeout(this.pulseTimer);
+      this.pulseTimer = null;
+    }
     const t = this.ctx.currentTime;
-    try { this.nodes.outGain.gain.setTargetAtTime(0.0001, t, 0.05); } catch {}
+    try {
+      this.nodes.pulseGain.gain.cancelScheduledValues(t); // Clear any future pulses
+      this.nodes.outGain.gain.setTargetAtTime(0.0001, t, 0.05);
+    } catch {}
     setTimeout(() => {
       Object.values(this.nodes).forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch{} });
-      this.nodes = {}; this.started = false;
+      this.nodes = {};
     }, 200);
+  }
+
+  schedulePulses(startTime) {
+    if (!this.started) return;
+
+    const now = this.ctx.currentTime;
+    const scheduleAheadTime = 0.2; // How far ahead to schedule
+    let nextPulseTime = startTime;
+
+    while (nextPulseTime < now + scheduleAheadTime) {
+      const elapsed = nextPulseTime - this.t0;
+      const beatHz = this.beatAt(elapsed);
+      if (beatHz <= 0) { // Avoid division by zero
+          nextPulseTime += 0.5; // If beat is 0, wait a bit and check again
+          continue;
+      }
+      const period = 1 / beatHz;
+      const pulseDuration = period / 2;
+      
+      // Make the ramp time a small fraction of the pulse, e.g., 5%, but not too long
+      const rampTime = Math.min(pulseDuration * 0.05, 0.01);
+
+      const gain = this.nodes.pulseGain.gain;
+      
+      // Schedule one pulse (a trapezoid shape)
+      gain.setValueAtTime(0, nextPulseTime);
+      gain.linearRampToValueAtTime(1, nextPulseTime + rampTime);
+      gain.setValueAtTime(1, nextPulseTime + pulseDuration - rampTime);
+      gain.linearRampToValueAtTime(0, nextPulseTime + pulseDuration);
+
+      nextPulseTime += period;
+    }
+
+    this.pulseTimer = setTimeout(() => this.schedulePulses(nextPulseTime), 100); // Check again in 100ms
   }
 
   setMute(m) {

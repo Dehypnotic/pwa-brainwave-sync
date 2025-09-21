@@ -1,4 +1,4 @@
-const CACHE = 'brainwave-sync-v1';
+const CACHE = 'brainwave-sync-v5';
 const ASSETS = [
   './',
   './index.html',
