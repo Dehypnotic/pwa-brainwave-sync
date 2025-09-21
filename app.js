@@ -78,17 +78,15 @@ class BrainwaveIso {
       }
       const period = 1 / beatHz;
       const pulseDuration = period / 2;
-      
-      // Make the ramp time a small fraction of the pulse, e.g., 5%, but not too long
-      const rampTime = Math.min(pulseDuration * 0.05, 0.01);
+      const peakTime = nextPulseTime + pulseDuration / 2;
+      const endTime = nextPulseTime + pulseDuration;
 
       const gain = this.nodes.pulseGain.gain;
       
-      // Schedule one pulse (a trapezoid shape)
+      // Schedule one pulse (a triangle shape)
       gain.setValueAtTime(0, nextPulseTime);
-      gain.linearRampToValueAtTime(1, nextPulseTime + rampTime);
-      gain.setValueAtTime(1, nextPulseTime + pulseDuration - rampTime);
-      gain.linearRampToValueAtTime(0, nextPulseTime + pulseDuration);
+      gain.linearRampToValueAtTime(1, peakTime);
+      gain.linearRampToValueAtTime(0, endTime);
 
       nextPulseTime += period;
     }
@@ -161,7 +159,9 @@ let engine = null;
 function loop() {
   if (engine) {
     drawSchedule(sched, engine);
-    readout.textContent = `Kjører: ${engine.started ? 'ja' : 'nei'}\\nForløpt: ${(engine.elapsed()/60).toFixed(1)} min\\nBeat nå: ${engine.beatAt(engine.elapsed()).toFixed(2)} Hz`;
+    readout.textContent = `Kjører: ${engine.started ? 'ja' : 'nei'}
+Forløpt: ${(engine.elapsed()/60).toFixed(1)} min
+Beat nå: ${engine.beatAt(engine.elapsed()).toFixed(2)} Hz`;
   } else {
     const ctx = sched.getContext('2d'); ctx.clearRect(0,0,sched.width,sched.height);
   }
