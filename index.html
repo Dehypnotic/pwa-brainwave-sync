@@ -72,11 +72,8 @@
         <div>
           <h2>Plan & live</h2>
           <canvas id="sched" width="1000" height="260"></canvas>
-          <div class="row" style="margin-top:.5rem">
-            <button id="startBtn">Start</button>
-            <button id="stopBtn" class="secondary">Stopp</button>
-            <button id="saveBtn" class="secondary">Lagre som WAV</button>
-            <small class="muted" id="status">Klar</small>
+                    <div class="row" style="margin-top:.5rem">
+            <button id="togglePlaybackBtn">Start</button>
           </div>
           <pre id="readout" style="margin-top:.5rem"></pre>
         </div>
@@ -158,7 +155,7 @@
             </div>
 
             <div class="param-row">
-              <span class="param-label">Lydkvalitet (lagring)</span>
+              <button id="saveBtn" class="secondary">Lagre som WAV</button>
               <div class="input-wrapper">
                 <select id="exportSampleRate" style="background:transparent; color:#e5e7eb; border:0; outline: none; -webkit-appearance: none; appearance: none;">
                   <option value="44100" style="background:#0b1220;">Høy (44.1 kHz)</option>

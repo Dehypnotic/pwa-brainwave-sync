@@ -208,7 +208,7 @@ class BrainwaveIso {
 
     if (this.opts.endAction !== 'hold' && elapsed > this.totalDuration) {
         this.stop();
-        requestAnimationFrame(() => { statusEl.textContent = 'Ferdig'; });
+        requestAnimationFrame(() => { q('togglePlaybackBtn').textContent = 'Start'; });
         return;
     }
 
@@ -221,7 +221,7 @@ class BrainwaveIso {
       if (beatHz <= 0) {
           if (this.opts.endAction !== 'hold' && currentElapsed > this.totalDuration) {
               this.stop();
-              requestAnimationFrame(() => { statusEl.textContent = 'Ferdig'; });
+              requestAnimationFrame(() => { q('togglePlaybackBtn').textContent = 'Start'; });
               return;
           }
           nextPulseTime += 0.5;
@@ -264,7 +264,6 @@ const q = id => document.getElementById(id);
 // --- Global State & UI Elements ---
 const sched = q('sched');
 const readout = q('readout');
-const statusEl = q('status');
 const pointEditor = q('pointEditor');
 const totalPointsInput = q('totalPoints');
 const editPointSelector = q('editPointSelector');
@@ -276,6 +275,7 @@ const singlePointHoursInput = q('singlePointHours');
 const singlePointMinutesInput = q('singlePointMinutes');
 const endActionInput = q('endAction');
 const exportSampleRateInput = q('exportSampleRate');
+const togglePlaybackBtn = q('togglePlaybackBtn');
 
 let engine = null;
 let currentEditingPoint = 2;
@@ -386,63 +386,52 @@ async function exportToWav() {
     return;
   }
 
-  statusEl.textContent = 'Genererer lydfil... Vær tålmodig.';
+  const originalBtnText = q('saveBtn').textContent;
+  q('saveBtn').textContent = 'Genererer...';
   q('saveBtn').disabled = true;
 
   try {
     const sampleRate = opts.exportSampleRate;
     const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, totalDuration * sampleRate, sampleRate);
 
-    // --- Re-create audio graph in offline context ---
     const carrier = offlineCtx.createOscillator();
     carrier.type = 'sine';
     carrier.frequency.value = opts.carrierHz;
-
     const pulseGain = offlineCtx.createGain();
     pulseGain.gain.value = 0;
-
     carrier.connect(pulseGain).connect(offlineCtx.destination);
     carrier.start();
 
-    // --- Schedule all pulses directly ---
     let currentTime = 0;
     while (currentTime < totalDuration) {
       const beatHz = getBeatAt(currentTime, opts);
-      if (beatHz <= 0) {
-        currentTime += 0.1; // Move time forward if beat is 0
-        continue;
-      }
+      if (beatHz <= 0) { currentTime += 0.1; continue; }
       const period = 1 / beatHz;
       const pulseDuration = period / 2;
       const peakTime = currentTime + pulseDuration / 2;
       const endTime = currentTime + pulseDuration;
-
       if (endTime > totalDuration) break;
-
       pulseGain.gain.setValueAtTime(0, currentTime);
       pulseGain.gain.linearRampToValueAtTime(1, peakTime);
       pulseGain.gain.linearRampToValueAtTime(0, endTime);
-
       currentTime += period;
     }
 
     const renderedBuffer = await offlineCtx.startRendering();
     const wavData = bufferToWav(renderedBuffer);
     const blob = new Blob([wavData], { type: 'audio/wav' });
-
     const anchor = document.createElement('a');
     anchor.href = URL.createObjectURL(blob);
     anchor.download = 'brainwave_session.wav';
     anchor.click();
-
     URL.revokeObjectURL(anchor.href);
-    statusEl.textContent = 'WAV-fil lagret.';
+    alert('WAV-fil lagret.');
 
   } catch (e) {
     console.error('Feil ved lagring av WAV:', e);
-    statusEl.textContent = 'Kunne ikke lagre fil.';
     alert('En feil oppsto under generering av lydfilen: ' + e.message);
   } finally {
+    q('saveBtn').textContent = originalBtnText;
     q('saveBtn').disabled = false;
   }
 }
@@ -502,19 +491,29 @@ q('saveBtn').addEventListener('click', exportToWav);
 
 q('mute').addEventListener('change', e => { if (engine) engine.setMute(e.target.checked); });
 
-q('startBtn').onclick = async () => {
-  try {
-    if (engine) engine.stop();
-    engine = new BrainwaveIso(getOpts());
-    await engine.ctx.resume(); // Important for browsers that start context in suspended state
-    engine.start();
-    statusEl.textContent = 'Spiller';
-  } catch (e) { 
-    console.error(e);
-    statusEl.textContent = 'Kunne ikke starte: ' + e.message;
+togglePlaybackBtn.onclick = async () => {
+  if (engine && engine.started) {
+    engine.stop();
+    engine = null;
+    togglePlaybackBtn.textContent = 'Start';
+    togglePlaybackBtn.classList.remove('secondary');
+    updatePreview();
+  } else {
+    try {
+      if (engine) engine.stop();
+      engine = new BrainwaveIso(getOpts());
+      await engine.ctx.resume();
+      engine.start();
+      togglePlaybackBtn.textContent = 'Stopp';
+      togglePlaybackBtn.classList.add('secondary');
+    } catch (e) {
+      console.error(e);
+      alert('Kunne ikke starte: ' + e.message);
+      togglePlaybackBtn.textContent = 'Start';
+      togglePlaybackBtn.classList.remove('secondary');
+    }
   }
 };
-q('stopBtn').onclick = () => { if (engine) { engine.stop(); statusEl.textContent = 'Stoppet'; engine = null; updatePreview(); } };
 
 function loop() {
   if (engine && engine.started) {
