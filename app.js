@@ -153,15 +153,17 @@ function drawSchedule(canvas, opts, elapsed = 0) {
   }
 
   // Draw Progress Indicator
-  const t = Math.min(elapsed, totalDuration);
-  const x = xMap(t);
-  const y = yMap(getBeatAt(t, opts));
-  ctx.setLineDash([6,4]); ctx.strokeStyle = '#e5e7eb';
-  ctx.beginPath(); ctx.moveTo(x, margin.top); ctx.lineTo(x, H-margin.bottom); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#e5e7eb'; ctx.font = '12px system-ui';
-  ctx.textAlign = 'left';
-  ctx.fillText(`beat≈${getBeatAt(t, opts).toFixed(2)} Hz`, x+8, y-8);
+  if (elapsed > 0) {
+    const t = Math.min(elapsed, totalDuration);
+    const x = xMap(t);
+    const y = yMap(getBeatAt(t, opts));
+    ctx.setLineDash([6,4]); ctx.strokeStyle = '#e5e7eb';
+    ctx.beginPath(); ctx.moveTo(x, margin.top); ctx.lineTo(x, H-margin.bottom); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#e5e7eb'; ctx.font = '12px system-ui';
+    ctx.textAlign = 'left';
+    ctx.fillText(`beat≈${getBeatAt(t, opts).toFixed(2)} Hz`, x+8, y-8);
+  }
 }
 
 // ====================================================================
