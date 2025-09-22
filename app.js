@@ -83,10 +83,18 @@ function drawSchedule(canvas, opts, elapsed = 0) {
   for (let i = 0; i <= numXLabels; i++) {
     const seconds = (i / numXLabels) * totalDuration;
     const x = xMap(seconds);
-    if (x < margin.left - 5 || x > W - margin.right + 5) continue;
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    const timeString = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    if (x < margin.left - 10 || x > W - margin.right + 10) continue;
+    
+    let timeString;
+    if (totalDuration < 3600) {
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      timeString = `${String(mins).padStart(2, '0')}'${String(secs).padStart(2, '0')}"`;
+    } else {
+      const hours = Math.floor(seconds / 3600);
+      const mins = Math.floor((seconds % 3600) / 60);
+      timeString = `${String(hours).padStart(2, '0')}h${String(mins).padStart(2, '0')}'`;
+    }
     ctx.fillText(timeString, x, H - margin.bottom + 8);
   }
 
