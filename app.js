@@ -44,39 +44,72 @@ function drawSchedule(canvas, opts, elapsed = 0) {
 
   const { startBeatHz, stages } = opts;
   const totalDuration = Math.max(1, getTotalDuration(opts));
-
   const allBeats = [startBeatHz, ...stages.map(s => s.beat)];
 
-  const margin = 28;
-  const xMap = s => margin + (s/totalDuration)*(W - 2*margin);
+  const margin = {top: 20, right: 20, bottom: 30, left: 35};
+  
   const yMin = Math.min(...allBeats) - 1;
   const yMax = Math.max(...allBeats) + 1;
-  const yMap = hz => H - margin - ((hz - yMin)/(yMax - yMin)) * (H - 2*margin);
 
+  const xMap = s => margin.left + (s/totalDuration)*(W - margin.left - margin.right);
+  const yMap = hz => H - margin.bottom - ((hz - yMin)/(yMax - yMin)) * (H - margin.top - margin.bottom);
+
+  // Draw Grid
   ctx.globalAlpha = .2; ctx.strokeStyle = '#94a3b8'; ctx.beginPath();
-  for (let i=0;i<=10;i++){ const x = margin + (i/10)*(W-2*margin); ctx.moveTo(x,margin); ctx.lineTo(x,H-margin); }
-  for (let i=0;i<=6;i++){ const y = margin + (i/6)*(H-2*margin); ctx.moveTo(margin,y); ctx.lineTo(W-margin,y); }
+  const numGridX = 10, numGridY = 6;
+  for (let i=0;i<=numGridX;i++){ const x = margin.left + (i/numGridX)*(W - margin.left - margin.right); ctx.moveTo(x,margin.top); ctx.lineTo(x,H-margin.bottom); }
+  for (let i=0;i<=numGridY;i++){ const y = margin.top + (i/numGridY)*(H - margin.top - margin.bottom); ctx.moveTo(margin.left,y); ctx.lineTo(W-margin.right,y); }
   ctx.stroke(); ctx.globalAlpha = 1;
 
+  // Draw Axis Labels
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '11px system-ui';
+  
+  // Y-Axis (Hz)
+  ctx.textAlign = 'right';
+  ctx.textBaseline = 'middle';
+  const numYLabels = numGridY;
+  for (let i = 0; i <= numYLabels; i++) {
+    const hz = yMin + (i / numYLabels) * (yMax - yMin);
+    const y = yMap(hz);
+    if (y < margin.top || y > H - margin.bottom + 5) continue;
+    ctx.fillText(hz.toFixed(1), margin.left - 8, y);
+  }
+
+  // X-Axis (Time)
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  const numXLabels = numGridX / 2;
+  for (let i = 0; i <= numXLabels; i++) {
+    const seconds = (i / numXLabels) * totalDuration;
+    const x = xMap(seconds);
+    if (x < margin.left - 5 || x > W - margin.right + 5) continue;
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const timeString = `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+    ctx.fillText(timeString, x, H - margin.bottom + 8);
+  }
+
+  // Draw Program Line
   ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.moveTo(xMap(0), yMap(startBeatHz));
-  
   let cumulativeTime = 0;
   for (const stage of stages) {
     cumulativeTime += stage.duration;
     ctx.lineTo(xMap(cumulativeTime), yMap(getBeatAt(cumulativeTime, opts)));
   }
-
   ctx.stroke();
 
+  // Draw Progress Indicator
   const t = Math.min(elapsed, totalDuration);
   const x = xMap(t);
   const y = yMap(getBeatAt(t, opts));
   ctx.setLineDash([6,4]); ctx.strokeStyle = '#e5e7eb';
-  ctx.beginPath(); ctx.moveTo(x, margin); ctx.lineTo(x, H-margin); ctx.stroke(); ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(x, margin.top); ctx.lineTo(x, H-margin.bottom); ctx.stroke(); ctx.setLineDash([]);
   ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#e5e7eb'; ctx.font = '12px system-ui';
+  ctx.textAlign = 'left';
   ctx.fillText(`beat≈${getBeatAt(t, opts).toFixed(2)} Hz`, x+8, y-8);
 }
 
