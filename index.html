@@ -28,6 +28,7 @@
     input[type='checkbox'] { transform: translateY(1px); }
     button { padding:.6rem 1rem; border-radius:12px; border:0; cursor:pointer; background:#2563eb; color:white; font-weight:600; }
     button.secondary { background:#334155; }
+    button.preset-btn.active { background: #1d4ed8; }
     small.muted { opacity:.8 }
     canvas { background:#0b1220; border-radius: 12px; display:block; width:100%; height:260px; }
     pre { white-space:pre-wrap; background:#0b1220; padding:.75rem; border-radius:.75rem; overflow:auto; }
@@ -74,6 +75,7 @@
           <canvas id="sched" width="1000" height="260"></canvas>
                     <div class="row" style="margin-top:.5rem">
             <button id="togglePlaybackBtn">Start</button>
+            <div id="presetsContainer" class="row" style="flex-grow: 1; justify-content: flex-end;"></div>
           </div>
           <pre id="readout" style="margin-top:.5rem"></pre>
         </div>

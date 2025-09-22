@@ -312,29 +312,43 @@ const togglePlaybackBtn = q('togglePlaybackBtn');
 let engine = null;
 let currentEditingPoint = 2;
 
-const pointsData = Array(9).fill(null).map((_, i) => ({
-  beat: (i === 0) ? 2 : 4,
-  hours: 0,
-  minutes: 30,
-}));
+const presetsContainer = q('presetsContainer');
+let presets = [];
+let activePresetIndex = 0;
+
+const defaultPreset = {
+  name: 'Default',
+  carrierHz: 400,
+  startBeatHz: 7,
+  totalPoints: 1,
+  singlePointHours: 0,
+  singlePointMinutes: 30,
+  stages: [],
+  endAction: 'hold',
+  exportSampleRate: 44100,
+  muted: false,
+};
 
 // --- Point Editor Logic ---
 function savePoint(pointNumber) {
   const index = pointNumber - 2;
-  if (index < 0 || index >= pointsData.length) return;
+  const currentStages = presets[activePresetIndex].stages;
+  if (index < 0 || index >= currentStages.length) return;
 
-  pointsData[index] = {
+  currentStages[index] = {
     beat: +pointBeatInput.value,
     hours: +pointHoursInput.value,
     minutes: +pointMinutesInput.value,
   };
+  savePresets(); // Save changes to localStorage
 }
 
 function loadPoint(pointNumber) {
   const index = pointNumber - 2;
-  if (index < 0 || index >= pointsData.length) return;
+  const currentStages = presets[activePresetIndex].stages;
+  if (index < 0 || index >= currentStages.length) return;
 
-  const data = pointsData[index];
+  const data = currentStages[index];
   pointBeatInput.value = data.beat;
   pointHoursInput.value = data.hours;
   pointMinutesInput.value = data.minutes;
@@ -355,6 +369,69 @@ function updateTotalPointsUI() {
             loadPoint(total);
         }
     }
+}
+
+// --- Preset Management ---
+function savePresets() {
+  localStorage.setItem('brainwavePresets', JSON.stringify(presets));
+}
+
+function saveActivePresetIndex() {
+  localStorage.setItem('brainwaveActivePresetIndex', activePresetIndex);
+}
+
+function loadPresetsAndState() {
+  const storedPresets = localStorage.getItem('brainwavePresets');
+  if (storedPresets) {
+    presets = JSON.parse(storedPresets);
+  } else {
+    // Create initial presets if none exist
+    presets = [
+      { ...defaultPreset, name: 'Preset 1' },
+      { ...defaultPreset, name: 'Preset 2', startBeatHz: 10, stages: [{ beat: 5, hours: 0, minutes: 30 }] },
+      { ...defaultPreset, name: 'Preset 3', startBeatHz: 4, stages: [{ beat: 8, hours: 0, minutes: 45 }] },
+      { ...defaultPreset, name: 'Preset 4', carrierHz: 200, startBeatHz: 6, totalPoints: 2, stages: [{ beat: 12, hours: 0, minutes: 20 }] },
+      { ...defaultPreset, name: 'Preset 5', carrierHz: 600, startBeatHz: 8, totalPoints: 3, stages: [{ beat: 4, hours: 0, minutes: 15 }, { beat: 10, hours: 0, minutes: 15 }] },
+      { ...defaultPreset, name: 'Preset 6', startBeatHz: 7.83, singlePointHours: 1, singlePointMinutes: 0 }, // Schumann Resonance
+    ];
+    savePresets();
+  }
+
+  const storedActivePresetIndex = localStorage.getItem('brainwaveActivePresetIndex');
+  if (storedActivePresetIndex !== null && +storedActivePresetIndex < presets.length) {
+    activePresetIndex = +storedActivePresetIndex;
+  } else {
+    activePresetIndex = 0;
+    saveActivePresetIndex();
+  }
+}
+
+function renderPresetButtons() {
+  presetsContainer.innerHTML = ''; // Clear existing buttons
+  presets.forEach((preset, index) => {
+    const button = document.createElement('button');
+    button.classList.add('preset-btn');
+    if (index === activePresetIndex) {
+      button.classList.add('active');
+    }
+    button.textContent = preset.name;
+    button.addEventListener('click', () => {
+      activePresetIndex = index;
+      saveActivePresetIndex();
+      updateUIFromPreset(presets[activePresetIndex]);
+      renderPresetButtons(); // Re-render to highlight active button
+      updatePreview();
+    });
+    button.addEventListener('dblclick', () => {
+      const newName = prompt('Enter new preset name:', preset.name);
+      if (newName && newName.trim() !== '') {
+        preset.name = newName.trim();
+        savePresets();
+        renderPresetButtons();
+      }
+    });
+    presetsContainer.appendChild(button);
+  });
 }
 
 // --- WAV Export Logic ---
@@ -470,33 +547,78 @@ async function exportToWav() {
 
 
 // --- Main App Logic ---
+function updateUIFromPreset(preset) {
+  q('carrier').value = preset.carrierHz;
+  q('startBeat').value = preset.startBeatHz;
+  q('endAction').value = preset.endAction;
+  q('exportSampleRate').value = preset.exportSampleRate;
+  q('mute').checked = preset.muted;
+
+  totalPointsInput.value = preset.totalPoints;
+  singlePointHoursInput.value = preset.singlePointHours;
+  singlePointMinutesInput.value = preset.singlePointMinutes;
+
+  updateTotalPointsUI(); // This will handle showing/hiding pointEditor and setting editPointSelector.max
+
+  // Load the currently selected point in the editor, or default to point 2
+  const currentEditorPoint = +editPointSelector.value;
+  if (currentEditorPoint > preset.totalPoints) {
+      editPointSelector.value = preset.totalPoints;
+      loadPoint(preset.totalPoints);
+  } else {
+      loadPoint(currentEditorPoint);
+  }
+}
+
+function updateActivePresetFromUI() {
+  const currentPreset = presets[activePresetIndex];
+
+  currentPreset.carrierHz = +q('carrier').value;
+  currentPreset.startBeatHz = +q('startBeat').value;
+  currentPreset.endAction = q('endAction').value;
+  currentPreset.exportSampleRate = +q('exportSampleRate').value;
+  currentPreset.muted = q('mute').checked;
+
+  currentPreset.totalPoints = +totalPointsInput.value;
+  currentPreset.singlePointHours = +singlePointHoursInput.value;
+  currentPreset.singlePointMinutes = +singlePointMinutesInput.value;
+
+  // Adjust stages array length if totalPoints changed
+  const newStagesLength = currentPreset.totalPoints - 1;
+  if (newStagesLength > currentPreset.stages.length) {
+      for (let i = currentPreset.stages.length; i < newStagesLength; i++) {
+          currentPreset.stages.push({ beat: 4, hours: 0, minutes: 30 }); // Default new stage
+      }
+  } else if (newStagesLength < currentPreset.stages.length) {
+      currentPreset.stages.splice(newStagesLength);
+  }
+  savePresets();
+}
+
 const getOpts = () => {
-  const total = +totalPointsInput.value;
-  const numStages = total - 1;
+  const currentPreset = presets[activePresetIndex];
   const stages = [];
 
-  if (numStages > 0) {
-    for (let i = 0; i < numStages; i++) {
-      const point = pointsData[i];
+  if (currentPreset.totalPoints > 1) {
+    for (let i = 0; i < currentPreset.stages.length; i++) {
+      const point = currentPreset.stages[i];
       const duration = (point.hours * 3600) + (point.minutes * 60);
       stages.push({ beat: point.beat, duration });
     }
-  } else {
-    const hours = +singlePointHoursInput.value;
-    const minutes = +singlePointMinutesInput.value;
-    const duration = (hours * 3600) + (minutes * 60);
+  } else { // totalPoints is 1
+    const duration = (currentPreset.singlePointHours * 3600) + (currentPreset.singlePointMinutes * 60);
     if (duration > 0) {
-      stages.push({ beat: +q('startBeat').value, duration });
+      stages.push({ beat: currentPreset.startBeatHz, duration });
     }
   }
 
   return {
-    carrierHz: +q('carrier').value || 400,
-    startBeatHz: +q('startBeat').value || 7,
+    carrierHz: currentPreset.carrierHz,
+    startBeatHz: currentPreset.startBeatHz,
     stages,
-    muted: q('mute').checked,
-    endAction: endActionInput.value,
-    exportSampleRate: +exportSampleRateInput.value || 44100,
+    muted: currentPreset.muted,
+    endAction: currentPreset.endAction,
+    exportSampleRate: currentPreset.exportSampleRate,
   };
 };
 
@@ -508,19 +630,27 @@ function updatePreview() {
 }
 
 // --- Event Listeners ---
-[editPointSelector, totalPointsInput, endActionInput, q('startBeat'), q('carrier'), exportSampleRateInput].forEach(input => {
-    input.addEventListener('change', updatePreview);
+[q('carrier'), q('startBeat'), endActionInput, exportSampleRateInput, q('mute'), singlePointHoursInput, singlePointMinutesInput].forEach(input => {
+    input.addEventListener('change', () => {
+        updateActivePresetFromUI();
+        updatePreview();
+    });
 });
-[pointBeatInput, pointHoursInput, pointMinutesInput, singlePointHoursInput, singlePointMinutesInput].forEach(input => {
+[pointBeatInput, pointHoursInput, pointMinutesInput].forEach(input => {
   input.addEventListener('input', () => {
-    savePoint(currentEditingPoint);
+    savePoint(currentEditingPoint); // savePoint already calls savePresets()
     updatePreview();
   });
 });
-totalPointsInput.addEventListener('input', updateTotalPointsUI);
+totalPointsInput.addEventListener('input', () => {
+    updateActivePresetFromUI(); // Update preset data first
+    updateTotalPointsUI(); // Then update UI based on new total points
+    updatePreview();
+});
 
 editPointSelector.addEventListener('change', () => {
     loadPoint(+editPointSelector.value);
+    updatePreview(); // Redraw graph to reflect potential point changes
 });
 
 q('saveBtn').addEventListener('click', exportToWav);
@@ -560,7 +690,8 @@ function loop() {
 }
 
 // --- Initial Setup ---
-loadPoint(2);
-updateTotalPointsUI();
+loadPresetsAndState(); // Load presets and active index
+updateUIFromPreset(presets[activePresetIndex]); // Populate UI with active preset
+renderPresetButtons(); // Render preset buttons
 updatePreview(); // Draw initial preview
 requestAnimationFrame(loop);
