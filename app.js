@@ -109,13 +109,26 @@ function drawSchedule(canvas, opts, elapsed = 0) {
   }
   ctx.stroke();
 
+  // Draw stage point markers
+  ctx.fillStyle = '#60a5fa';
+  ctx.beginPath();
+  ctx.arc(xMap(0), yMap(startBeatHz), 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  cumulativeTime = 0;
+  for (const stage of stages) {
+    cumulativeTime += stage.duration;
+    ctx.beginPath();
+    ctx.arc(xMap(cumulativeTime), yMap(getBeatAt(cumulativeTime, opts)), 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   // Draw Progress Indicator
   const t = Math.min(elapsed, totalDuration);
   const x = xMap(t);
   const y = yMap(getBeatAt(t, opts));
   ctx.setLineDash([6,4]); ctx.strokeStyle = '#e5e7eb';
   ctx.beginPath(); ctx.moveTo(x, margin.top); ctx.lineTo(x, H-margin.bottom); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI*2); ctx.fill();
   ctx.fillStyle = '#e5e7eb'; ctx.font = '12px system-ui';
   ctx.textAlign = 'left';
   ctx.fillText(`beat≈${getBeatAt(t, opts).toFixed(2)} Hz`, x+8, y-8);
