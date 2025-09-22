@@ -1,33 +1,117 @@
 // Brainwave Sync (Isochronic pulses) + Schedule canvas
+
+// ====================================================================
+// Standalone utility functions for calculation and rendering
+// ====================================================================
+
+function getTotalDuration(opts) {
+  return opts.stages.reduce((sum, s) => sum + s.duration, 0);
+}
+
+function getBeatAt(sec, opts) {
+  const { startBeatHz, stages } = opts;
+  if (sec <= 0) return startBeatHz;
+
+  let cumulativeTime = 0;
+  let previousBeat = startBeatHz;
+
+  for (const stage of stages) {
+    const stageStartTime = cumulativeTime;
+    const stageEndTime = cumulativeTime + stage.duration;
+
+    if (sec < stageEndTime) {
+      const timeIntoStage = sec - stageStartTime;
+      if (stage.duration === 0) return previousBeat; // Avoid division by zero
+      const k = timeIntoStage / stage.duration;
+      return previousBeat + (stage.beat - previousBeat) * k;
+    }
+
+    cumulativeTime = stageEndTime;
+    previousBeat = stage.beat;
+  }
+
+  return previousBeat;
+}
+
+function drawSchedule(canvas, opts, elapsed = 0) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  const dpr = devicePixelRatio || 1;
+  canvas.width = Math.max(1, Math.floor(W * dpr));
+  canvas.height = Math.max(1, Math.floor(H * dpr));
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,W,H);
+
+  const { startBeatHz, stages } = opts;
+  const totalDuration = Math.max(1, getTotalDuration(opts));
+
+  const allBeats = [startBeatHz, ...stages.map(s => s.beat)];
+
+  const margin = 28;
+  const xMap = s => margin + (s/totalDuration)*(W - 2*margin);
+  const yMin = Math.min(...allBeats) - 1;
+  const yMax = Math.max(...allBeats) + 1;
+  const yMap = hz => H - margin - ((hz - yMin)/(yMax - yMin)) * (H - 2*margin);
+
+  ctx.globalAlpha = .2; ctx.strokeStyle = '#94a3b8'; ctx.beginPath();
+  for (let i=0;i<=10;i++){ const x = margin + (i/10)*(W-2*margin); ctx.moveTo(x,margin); ctx.lineTo(x,H-margin); }
+  for (let i=0;i<=6;i++){ const y = margin + (i/6)*(H-2*margin); ctx.moveTo(margin,y); ctx.lineTo(W-margin,y); }
+  ctx.stroke(); ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(xMap(0), yMap(startBeatHz));
+  
+  let cumulativeTime = 0;
+  for (const stage of stages) {
+    cumulativeTime += stage.duration;
+    ctx.lineTo(xMap(cumulativeTime), yMap(getBeatAt(cumulativeTime, opts)));
+  }
+
+  ctx.stroke();
+
+  const t = Math.min(elapsed, totalDuration);
+  const x = xMap(t);
+  const y = yMap(getBeatAt(t, opts));
+  ctx.setLineDash([6,4]); ctx.strokeStyle = '#e5e7eb';
+  ctx.beginPath(); ctx.moveTo(x, margin); ctx.lineTo(x, H-margin); ctx.stroke(); ctx.setLineDash([]);
+  ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#e5e7eb'; ctx.font = '12px system-ui';
+  ctx.fillText(`beat≈${getBeatAt(t, opts).toFixed(2)} Hz`, x+8, y-8);
+}
+
+// ====================================================================
+// Audio Engine Class
+// ====================================================================
+
 class BrainwaveIso {
-  constructor({carrierHz=400, startBeatHz=7, endBeatHz=4, rampSeconds=1800, holdSeconds=1800, muted=false}) {
+  constructor(opts) {
     this.ctx = new (window.AudioContext || window.webkitAudioContext)();
-    this.opts = {carrierHz, startBeatHz, endBeatHz, rampSeconds, holdSeconds, muted};
+    this.opts = opts;
+    this.totalDuration = getTotalDuration(opts);
     this.started = false;
     this.nodes = {};
     this.pulseTimer = null;
   }
 
   _build() {
-    const ctx = this.ctx;
     const o = this.opts;
-
-    const carrier = ctx.createOscillator();
+    const carrier = this.ctx.createOscillator();
     carrier.type = 'sine';
     carrier.frequency.value = o.carrierHz;
 
-    const outGain = ctx.createGain();
+    const outGain = this.ctx.createGain();
     outGain.gain.value = 0; // Start at 0 for fade-in
 
-    const pulseGain = ctx.createGain();
+    const pulseGain = this.ctx.createGain();
     pulseGain.gain.value = 0; // This will be controlled by the scheduler
 
-    carrier.connect(pulseGain).connect(outGain).connect(ctx.destination);
+    carrier.connect(pulseGain).connect(outGain).connect(this.ctx.destination);
 
     carrier.start();
 
     this.nodes = {carrier, outGain, pulseGain};
-    this.t0 = ctx.currentTime;
+    this.t0 = this.ctx.currentTime;
   }
 
   start() {
@@ -39,7 +123,7 @@ class BrainwaveIso {
       if (!this.opts.muted) {
         this.nodes.outGain.gain.setTargetAtTime(1.0, t, 0.05);
       }
-    } catch {}
+    } catch {} // Ignore errors
     this.started = true;
     this.schedulePulses(this.ctx.currentTime);
   }
@@ -53,9 +137,9 @@ class BrainwaveIso {
     }
     const t = this.ctx.currentTime;
     try {
-      this.nodes.pulseGain.gain.cancelScheduledValues(t); // Clear any future pulses
+      this.nodes.pulseGain.gain.cancelScheduledValues(t);
       this.nodes.outGain.gain.setTargetAtTime(0.0001, t, 0.05);
-    } catch {}
+    } catch {} // Ignore errors
     setTimeout(() => {
       Object.values(this.nodes).forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch{} });
       this.nodes = {};
@@ -66,14 +150,27 @@ class BrainwaveIso {
     if (!this.started) return;
 
     const now = this.ctx.currentTime;
-    const scheduleAheadTime = 0.2; // How far ahead to schedule
+    const elapsed = now - this.t0;
+
+    if (this.opts.endAction !== 'hold' && elapsed > this.totalDuration) {
+        this.stop();
+        requestAnimationFrame(() => { statusEl.textContent = 'Ferdig'; });
+        return;
+    }
+
+    const scheduleAheadTime = 0.2;
     let nextPulseTime = startTime;
 
     while (nextPulseTime < now + scheduleAheadTime) {
-      const elapsed = nextPulseTime - this.t0;
-      const beatHz = this.beatAt(elapsed);
-      if (beatHz <= 0) { // Avoid division by zero
-          nextPulseTime += 0.5; // If beat is 0, wait a bit and check again
+      const currentElapsed = nextPulseTime - this.t0;
+      const beatHz = getBeatAt(currentElapsed, this.opts);
+      if (beatHz <= 0) {
+          if (this.opts.endAction !== 'hold' && currentElapsed > this.totalDuration) {
+              this.stop();
+              requestAnimationFrame(() => { statusEl.textContent = 'Ferdig'; });
+              return;
+          }
+          nextPulseTime += 0.5;
           continue;
       }
       const period = 1 / beatHz;
@@ -83,7 +180,6 @@ class BrainwaveIso {
 
       const gain = this.nodes.pulseGain.gain;
       
-      // Schedule one pulse (a triangle shape)
       gain.setValueAtTime(0, nextPulseTime);
       gain.linearRampToValueAtTime(1, peakTime);
       gain.linearRampToValueAtTime(0, endTime);
@@ -91,93 +187,137 @@ class BrainwaveIso {
       nextPulseTime += period;
     }
 
-    this.pulseTimer = setTimeout(() => this.schedulePulses(nextPulseTime), 100); // Check again in 100ms
+    this.pulseTimer = setTimeout(() => this.schedulePulses(nextPulseTime), 100);
   }
 
   setMute(m) {
     this.opts.muted = m;
     if (this.nodes.outGain) {
       const targetGain = m ? 0 : 1;
-      try { this.nodes.outGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05); } catch {}
+      try { this.nodes.outGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05); } catch {} // Ignore errors
     }
   }
 
-  beatAt(sec) {
-    const {startBeatHz, endBeatHz, rampSeconds} = this.opts;
-    if (sec <= 0) return startBeatHz;
-    if (sec >= rampSeconds) return endBeatHz;
-    const k = sec / rampSeconds;
-    return startBeatHz + (endBeatHz - startBeatHz) * k;
-  }
   elapsed() { return this.started ? (this.ctx.currentTime - this.t0) : 0; }
 }
 
-function drawSchedule(canvas, engine) {
-  const ctx = canvas.getContext('2d');
-  const W = canvas.clientWidth, H = canvas.clientHeight;
-  const dpr = devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(W * dpr));
-  canvas.height = Math.max(1, Math.floor(H * dpr));
-  ctx.setTransform(dpr,0,0,dpr,0,0);
-  ctx.clearRect(0,0,W,H);
-
-  const {startBeatHz, endBeatHz, rampSeconds, holdSeconds} = engine.opts;
-  const total = rampSeconds + holdSeconds;
-  const margin = 28;
-  const xMap = s => margin + (s/total)*(W - 2*margin);
-  const yMin = Math.min(startBeatHz, endBeatHz) - 1;
-  const yMax = Math.max(startBeatHz, endBeatHz) + 1;
-  const yMap = hz => H - margin - ((hz - yMin)/(yMax - yMin)) * (H - 2*margin);
-
-  ctx.globalAlpha = .2; ctx.strokeStyle = '#94a3b8'; ctx.beginPath();
-  for (let i=0;i<=10;i++){ const x = margin + (i/10)*(W-2*margin); ctx.moveTo(x,margin); ctx.lineTo(x,H-margin); }
-  for (let i=0;i<=6;i++){ const y = margin + (i/6)*(H-2*margin); ctx.moveTo(margin,y); ctx.lineTo(W-margin,y); }
-  ctx.stroke(); ctx.globalAlpha = 1;
-
-  ctx.strokeStyle = '#60a5fa'; ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(xMap(0), yMap(startBeatHz));
-  ctx.lineTo(xMap(rampSeconds), yMap(endBeatHz));
-  ctx.lineTo(xMap(total), yMap(endBeatHz));
-  ctx.stroke();
-
-  const t = Math.min(engine.elapsed(), total);
-  const x = xMap(t);
-  const y = yMap(engine.beatAt(t));
-  ctx.setLineDash([6,4]); ctx.strokeStyle = '#e5e7eb';
-  ctx.beginPath(); ctx.moveTo(x, margin); ctx.lineTo(x, H-margin); ctx.stroke(); ctx.setLineDash([]);
-  ctx.fillStyle = '#fbbf24'; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#e5e7eb'; ctx.font = '12px system-ui';
-  ctx.fillText(`beat≈${engine.beatAt(t).toFixed(2)} Hz`, x+8, y-8);
-}
-
-const sched = document.getElementById('sched');
-const readout = document.getElementById('readout');
-const statusEl = document.getElementById('status');
-let engine = null;
-
-function loop() {
-  if (engine) {
-    drawSchedule(sched, engine);
-    readout.textContent = `Kjører: ${engine.started ? 'ja' : 'nei'}
-Forløpt: ${(engine.elapsed()/60).toFixed(1)} min
-Beat nå: ${engine.beatAt(engine.elapsed()).toFixed(2)} Hz`;
-  } else {
-    const ctx = sched.getContext('2d'); ctx.clearRect(0,0,sched.width,sched.height);
-  }
-  requestAnimationFrame(loop);
-}
-requestAnimationFrame(loop);
+// ====================================================================
+// UI and Application Logic
+// ====================================================================
 
 const q = id => document.getElementById(id);
-const getOpts = () => ({
-  carrierHz: +q('carrier').value || 400,
-  startBeatHz: +q('startBeat').value || 7,
-  endBeatHz: +q('endBeat').value || 4,
-  rampSeconds: (+q('rampMin').value || 30) * 60,
-  holdSeconds: (+q('holdMin').value || 30) * 60,
-  muted: q('mute').checked,
+
+// --- Global State & UI Elements ---
+const sched = q('sched');
+const readout = q('readout');
+const statusEl = q('status');
+const pointEditor = q('pointEditor');
+const totalPointsInput = q('totalPoints');
+const editPointSelector = q('editPointSelector');
+const pointBeatInput = q('pointBeat');
+const pointHoursInput = q('pointHours');
+const pointMinutesInput = q('pointMinutes');
+const singlePointDurationContainer = q('singlePointDurationContainer');
+const singlePointHoursInput = q('singlePointHours');
+const singlePointMinutesInput = q('singlePointMinutes');
+const endActionInput = q('endAction');
+
+let engine = null;
+let currentEditingPoint = 2;
+
+const pointsData = Array(9).fill(null).map((_, i) => ({
+  beat: (i === 0) ? 2 : 4,
+  hours: 0,
+  minutes: 30,
+}));
+
+// --- Point Editor Logic ---
+function savePoint(pointNumber) {
+  const index = pointNumber - 2;
+  if (index < 0 || index >= pointsData.length) return;
+
+  pointsData[index] = {
+    beat: +pointBeatInput.value,
+    hours: +pointHoursInput.value,
+    minutes: +pointMinutesInput.value,
+  };
+}
+
+function loadPoint(pointNumber) {
+  const index = pointNumber - 2;
+  if (index < 0 || index >= pointsData.length) return;
+
+  const data = pointsData[index];
+  pointBeatInput.value = data.beat;
+  pointHoursInput.value = data.hours;
+  pointMinutesInput.value = data.minutes;
+  currentEditingPoint = pointNumber;
+}
+
+function updateTotalPointsUI() {
+    const total = +totalPointsInput.value;
+    if (total <= 1) {
+        pointEditor.style.display = 'none';
+        singlePointDurationContainer.style.display = 'block';
+    } else {
+        pointEditor.style.display = 'flex';
+        singlePointDurationContainer.style.display = 'none';
+        editPointSelector.max = total;
+        if (+editPointSelector.value > total) {
+            editPointSelector.value = total;
+            loadPoint(total);
+        }
+    }
+}
+
+// --- Main App Logic ---
+const getOpts = () => {
+  const total = +totalPointsInput.value;
+  const numStages = total - 1;
+  const stages = [];
+
+  if (numStages > 0) {
+    for (let i = 0; i < numStages; i++) {
+      const point = pointsData[i];
+      const duration = (point.hours * 3600) + (point.minutes * 60);
+      stages.push({ beat: point.beat, duration });
+    }
+  } else {
+    const hours = +singlePointHoursInput.value;
+    const minutes = +singlePointMinutesInput.value;
+    const duration = (hours * 3600) + (minutes * 60);
+    if (duration > 0) {
+      stages.push({ beat: +q('startBeat').value, duration });
+    }
+  }
+
+  return {
+    carrierHz: +q('carrier').value || 400,
+    startBeatHz: +q('startBeat').value || 7,
+    stages,
+    muted: q('mute').checked,
+    endAction: endActionInput.value,
+  };
+};
+
+function updatePreview() {
+    if (engine && engine.started) return;
+    const opts = getOpts();
+    drawSchedule(sched, opts, 0);
+    readout.textContent = `Kjører: nei\nForløpt: 0.0 min\nBeat nå: ${opts.startBeatHz.toFixed(2)} Hz`;
+}
+
+// --- Event Listeners ---
+[editPointSelector, totalPointsInput, endActionInput, q('startBeat'), q('carrier')].forEach(input => {
+    input.addEventListener('change', updatePreview);
 });
+[pointBeatInput, pointHoursInput, pointMinutesInput, singlePointHoursInput, singlePointMinutesInput].forEach(input => {
+  input.addEventListener('input', () => {
+    savePoint(currentEditingPoint);
+    updatePreview();
+  });
+});
+totalPointsInput.addEventListener('input', updateTotalPointsUI);
 
 q('mute').addEventListener('change', e => { if (engine) engine.setMute(e.target.checked); });
 
@@ -185,9 +325,26 @@ q('startBtn').onclick = async () => {
   try {
     if (engine) engine.stop();
     engine = new BrainwaveIso(getOpts());
-    await engine.ctx.resume();
+    await engine.ctx.resume(); // Important for browsers that start context in suspended state
     engine.start();
     statusEl.textContent = 'Spiller';
-  } catch (e) { statusEl.textContent = 'Kunne ikke starte: ' + e; }
+  } catch (e) { 
+    console.error(e);
+    statusEl.textContent = 'Kunne ikke starte: ' + e.message;
+  }
 };
-q('stopBtn').onclick = () => { if (engine) engine.stop(); statusEl.textContent = 'Stoppet'; };
+q('stopBtn').onclick = () => { if (engine) { engine.stop(); statusEl.textContent = 'Stoppet'; engine = null; updatePreview(); } };
+
+function loop() {
+  if (engine && engine.started) {
+    drawSchedule(sched, engine.opts, engine.elapsed());
+    readout.textContent = `Kjører: ja\nForløpt: ${(engine.elapsed()/60).toFixed(1)} min\nBeat nå: ${getBeatAt(engine.elapsed(), engine.opts).toFixed(2)} Hz`;
+  }
+  requestAnimationFrame(loop);
+}
+
+// --- Initial Setup ---
+loadPoint(2);
+updateTotalPointsUI();
+updatePreview(); // Draw initial preview
+requestAnimationFrame(loop);
