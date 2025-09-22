@@ -311,6 +311,129 @@ function updateTotalPointsUI() {
     }
 }
 
+// --- WAV Export Logic ---
+function bufferToWav(buffer) {
+  const numOfChan = buffer.numberOfChannels, length = buffer.length * numOfChan * 2 + 44;
+  const bufferWav = new ArrayBuffer(length);
+  const view = new DataView(bufferWav);
+  const channels = [];
+  let i, sample;
+  let offset = 0, pos = 0;
+
+  // Helper function
+  const setUint16 = (data) => {
+    view.setUint16(pos, data, true);
+    pos += 2;
+  }
+  const setUint32 = (data) => {
+    view.setUint32(pos, data, true);
+    pos += 4;
+  }
+
+  // Write WAVE header
+  setUint32(0x46464952); // "RIFF"
+  setUint32(length - 8); // file length - 8
+  setUint32(0x45564157); // "WAVE"
+
+  setUint32(0x20746d66); // "fmt " chunk
+  setUint32(16); // length = 16
+  setUint16(1); // PCM (uncompressed)
+  setUint16(numOfChan);
+  setUint32(buffer.sampleRate);
+  setUint32(buffer.sampleRate * 2 * numOfChan); // avg. bytes/sec
+  setUint16(numOfChan * 2); // block-align
+  setUint16(16); // 16-bit
+
+  setUint32(0x61746164); // "data" - chunk
+  setUint32(length - pos - 4); // chunk length
+
+  // Write PCM samples
+  for (i = 0; i < buffer.numberOfChannels; i++)
+    channels.push(buffer.getChannelData(i));
+
+  while (pos < length) {
+    for (i = 0; i < numOfChan; i++) {
+      sample = Math.max(-1, Math.min(1, channels[i][offset])); // clamp
+      sample = (0.5 + sample < 0 ? sample * 32768 : sample * 32767) | 0; // scale to 16-bit signed int
+      view.setInt16(pos, sample, true);
+      pos += 2;
+    }
+    offset++
+  }
+
+  return bufferWav;
+}
+
+async function exportToWav() {
+  const opts = getOpts();
+  const totalDuration = getTotalDuration(opts);
+  if (totalDuration <= 0) {
+    alert("Kan ikke lagre en økt med 0 sekunders varighet.");
+    return;
+  }
+
+  statusEl.textContent = 'Genererer lydfil... Vær tålmodig.';
+  q('saveBtn').disabled = true;
+
+  try {
+    const sampleRate = 44100;
+    const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, totalDuration * sampleRate, sampleRate);
+
+    // --- Re-create audio graph in offline context ---
+    const carrier = offlineCtx.createOscillator();
+    carrier.type = 'sine';
+    carrier.frequency.value = opts.carrierHz;
+
+    const pulseGain = offlineCtx.createGain();
+    pulseGain.gain.value = 0;
+
+    carrier.connect(pulseGain).connect(offlineCtx.destination);
+    carrier.start();
+
+    // --- Schedule all pulses directly ---
+    let currentTime = 0;
+    while (currentTime < totalDuration) {
+      const beatHz = getBeatAt(currentTime, opts);
+      if (beatHz <= 0) {
+        currentTime += 0.1; // Move time forward if beat is 0
+        continue;
+      }
+      const period = 1 / beatHz;
+      const pulseDuration = period / 2;
+      const peakTime = currentTime + pulseDuration / 2;
+      const endTime = currentTime + pulseDuration;
+
+      if (endTime > totalDuration) break;
+
+      pulseGain.gain.setValueAtTime(0, currentTime);
+      pulseGain.gain.linearRampToValueAtTime(1, peakTime);
+      pulseGain.gain.linearRampToValueAtTime(0, endTime);
+
+      currentTime += period;
+    }
+
+    const renderedBuffer = await offlineCtx.startRendering();
+    const wavData = bufferToWav(renderedBuffer);
+    const blob = new Blob([wavData], { type: 'audio/wav' });
+
+    const anchor = document.createElement('a');
+    anchor.href = URL.createObjectURL(blob);
+    anchor.download = 'brainwave_session.wav';
+    anchor.click();
+
+    URL.revokeObjectURL(anchor.href);
+    statusEl.textContent = 'WAV-fil lagret.';
+
+  } catch (e) {
+    console.error('Feil ved lagring av WAV:', e);
+    statusEl.textContent = 'Kunne ikke lagre fil.';
+    alert('En feil oppsto under generering av lydfilen: ' + e.message);
+  } finally {
+    q('saveBtn').disabled = false;
+  }
+}
+
+
 // --- Main App Logic ---
 const getOpts = () => {
   const total = +totalPointsInput.value;
@@ -359,6 +482,8 @@ function updatePreview() {
   });
 });
 totalPointsInput.addEventListener('input', updateTotalPointsUI);
+
+q('saveBtn').addEventListener('click', exportToWav);
 
 q('mute').addEventListener('change', e => { if (engine) engine.setMute(e.target.checked); });
 

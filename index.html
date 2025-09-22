@@ -15,8 +15,18 @@
     h1, h2 { margin: .25rem 0 .75rem; }
     .row { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
     .col { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
-    label { display:flex; align-items:center; gap:.35rem; background:#0b1220; padding:.5rem .6rem; border-radius:.7rem; border:1px solid #1f2937; }
-    input[type='number'], input[type='range'] { width: 7rem; background:#0b1220; color:#e5e7eb; border:0; outline:none; }
+    
+    /* Old label style removed */
+
+    input[type='number'] {
+      width: 4.5rem;
+      background: transparent;
+      color: #e5e7eb;
+      border: 0;
+      outline: none;
+      text-align: right;
+      font-size: 1rem;
+    }
     input[type='checkbox'] { transform: translateY(1px); }
     button { padding:.6rem 1rem; border-radius:12px; border:0; cursor:pointer; background:#2563eb; color:white; font-weight:600; }
     button.secondary { background:#334155; }
@@ -24,6 +34,28 @@
     canvas { background:#0b1220; border-radius: 12px; display:block; width:100%; height:260px; }
     pre { white-space:pre-wrap; background:#0b1220; padding:.75rem; border-radius:.75rem; overflow:auto; }
     .grid { display:grid; grid-template-columns: 1fr; gap:1rem; }
+
+    /* New Parameter Styles */
+    .param-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      width: 100%;
+      padding: .1rem 0;
+    }
+    .param-label { color: #cbd5e1; }
+    .param-unit { color: #64748b; font-size: .9rem; }
+    .input-wrapper {
+      display: flex;
+      align-items: center;
+      background: #0b1220;
+      padding: .4rem .6rem;
+      border-radius: .7rem;
+      border: 1px solid #1f2937;
+      gap: .35rem;
+    }
+    #pointEditor .param-row { padding: .3rem 0; }
+
     @media (min-width: 840px) { .grid { grid-template-columns: 1.2fr .8fr; } }
   </style>
 </head>
@@ -39,46 +71,92 @@
           <div class="row" style="margin-top:.5rem">
             <button id="startBtn">Start</button>
             <button id="stopBtn" class="secondary">Stopp</button>
+            <button id="saveBtn" class="secondary">Lagre som WAV</button>
             <small class="muted" id="status">Klar</small>
           </div>
           <pre id="readout" style="margin-top:.5rem"></pre>
         </div>
         <div>
           <h2>Parametre</h2>
-          <div class="col" id="paramsContainer" style="flex-direction: column; align-items: flex-start; gap: .5rem;">
-            <div class="row">
-              <label>Bæretone <input id="carrier" type="number" value="400" min="80" max="1200"> Hz</label>
-              <label>Start beat <input id="startBeat" type="number" value="7" step="0.1"> Hz</label>
+          <div id="paramsContainer" style="display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; width: 100%;">
+            
+            <div class="param-row">
+              <span class="param-label">Bæretone</span>
+              <div class="input-wrapper">
+                <input id="carrier" type="number" value="400">
+                <span class="param-unit">Hz</span>
+              </div>
             </div>
+
+            <div class="param-row">
+              <span class="param-label">Start beat</span>
+              <div class="input-wrapper">
+                <input id="startBeat" type="number" value="7" step="0.1">
+                <span class="param-unit">Hz</span>
+              </div>
+            </div>
+
             <hr style="width: 100%; border-color: #1f2937; margin: .5rem 0;">
-            <div class="row">
-                <label>Totalt antall punkter <input id="totalPoints" type="number" value="1" min="1" max="10" style="width: 5rem;"></label>
+
+            <div class="param-row">
+              <span class="param-label">Totalt antall punkter</span>
+              <div class="input-wrapper">
+                <input id="totalPoints" type="number" value="1" min="1" max="10">
+              </div>
             </div>
-            <div id="singlePointDurationContainer" style="display: none; margin-left: .5rem;">
-                <label>Varighet: 
-                    <input id="singlePointHours" type="number" value="0" min="0" style="width: 4rem;"> t
-                    <input id="singlePointMinutes" type="number" value="30" min="0" max="59" style="width: 4rem;"> m
-                </label>
+
+            <div id="singlePointDurationContainer" style="display: none; width: 100%;">
+              <div class="param-row">
+                <span class="param-label">Varighet</span>
+                <div class="input-wrapper">
+                  <input id="singlePointHours" type="number" value="0" min="0" style="width: 3rem;">
+                  <span class="param-unit">t</span>
+                  <input id="singlePointMinutes" type="number" value="30" min="0" max="59" style="width: 3rem;">
+                  <span class="param-unit">m</span>
+                </div>
+              </div>
             </div>
+
             <div id="pointEditor" style="display: flex; flex-direction: column; gap: .5rem; padding: .75rem; border: 1px solid #1f2937; border-radius: .7rem; width: calc(100% - 1.5rem); box-sizing: border-box;">
-                <label style="justify-content: space-between;"><strong>Rediger Punkt</strong> <input id="editPointSelector" type="number" value="2" min="2" max="10" style="width: 5rem;"></label>
-                <label>Beat <input id="pointBeat" type="number" value="2" step="0.1"> Hz</label>
-                <label>Tid etter forrige: 
-                    <input id="pointHours" type="number" value="0" min="0" style="width: 4rem;"> t
-                    <input id="pointMinutes" type="number" value="30" min="0" max="59" style="width: 4rem;"> m
-                </label>
+              <div class="param-row">
+                <span class="param-label"><strong>Rediger Punkt</strong></span>
+                <div class="input-wrapper">
+                  <input id="editPointSelector" type="number" value="2" min="2" max="10">
+                </div>
+              </div>
+              <div class="param-row">
+                <span class="param-label">Beat</span>
+                <div class="input-wrapper">
+                  <input id="pointBeat" type="number" value="2" step="0.1">
+                  <span class="param-unit">Hz</span>
+                </div>
+              </div>
+              <div class="param-row">
+                <span class="param-label">Tid etter forrige</span>
+                <div class="input-wrapper">
+                  <input id="pointHours" type="number" value="0" min="0" style="width: 3rem;">
+                  <span class="param-unit">t</span>
+                  <input id="pointMinutes" type="number" value="30" min="0" max="59" style="width: 3rem;">
+                  <span class="param-unit">m</span>
+                </div>
+              </div>
             </div>
-            <div class="row" style="margin-top: .5rem;">
-              <label>Etter slutten: 
-                                <select id="endAction" style="background:#0b1220; color:#e5e7eb; border:0; padding:.5rem; border-radius:.7rem; border:1px solid #1f2937;">
-                  <option value="hold">Hold siste beat</option>
-                  <option value="stop">Stopp lyden</option>
+
+            <div class="param-row" style="margin-top: .5rem;">
+              <span class="param-label">Etter slutten</span>
+              <div class="input-wrapper">
+                <select id="endAction" style="background:transparent; color:#e5e7eb; border:0; outline: none; -webkit-appearance: none; appearance: none;">
+                  <option value="hold" style="background:#0b1220;">Hold siste beat</option>
+                  <option value="stop" style="background:#0b1220;">Stopp lyden</option>
                 </select>
-              </label>
+              </div>
             </div>
-          </div>
-          <div class="col" style="margin-top:.5rem">
-            <label><input id="mute" type="checkbox"> Mute</label>
+
+            <div class="param-row">
+                <span class="param-label">Mute</span>
+                <label class="input-wrapper" style="padding: .6rem;"><input id="mute" type="checkbox"></label>
+            </div>
+
           </div>
           <p><small class="muted">Ikke medisinsk utstyr. Unngå høy lyd og bruk hodetelefoner med fornuftig volum.</small></p>
         </div>
