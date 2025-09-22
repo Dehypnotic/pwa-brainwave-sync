@@ -262,6 +262,7 @@ const singlePointDurationContainer = q('singlePointDurationContainer');
 const singlePointHoursInput = q('singlePointHours');
 const singlePointMinutesInput = q('singlePointMinutes');
 const endActionInput = q('endAction');
+const exportSampleRateInput = q('exportSampleRate');
 
 let engine = null;
 let currentEditingPoint = 2;
@@ -376,7 +377,7 @@ async function exportToWav() {
   q('saveBtn').disabled = true;
 
   try {
-    const sampleRate = 44100;
+    const sampleRate = opts.exportSampleRate;
     const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, totalDuration * sampleRate, sampleRate);
 
     // --- Re-create audio graph in offline context ---
@@ -461,6 +462,7 @@ const getOpts = () => {
     stages,
     muted: q('mute').checked,
     endAction: endActionInput.value,
+    exportSampleRate: +exportSampleRateInput.value || 44100,
   };
 };
 
@@ -472,7 +474,7 @@ function updatePreview() {
 }
 
 // --- Event Listeners ---
-[editPointSelector, totalPointsInput, endActionInput, q('startBeat'), q('carrier')].forEach(input => {
+[editPointSelector, totalPointsInput, endActionInput, q('startBeat'), q('carrier'), exportSampleRateInput].forEach(input => {
     input.addEventListener('change', updatePreview);
 });
 [pointBeatInput, pointHoursInput, pointMinutesInput, singlePointHoursInput, singlePointMinutesInput].forEach(input => {
