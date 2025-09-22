@@ -122,6 +122,36 @@ function drawSchedule(canvas, opts, elapsed = 0) {
     ctx.fill();
   }
 
+  // Draw point labels
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '11px system-ui';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+
+  const formatTimeLabel = (seconds) => {
+      if (seconds === 0) return 'Start';
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m}m`;
+  };
+
+  // Label for start point
+  ctx.fillText(`${startBeatHz.toFixed(1)}Hz`, xMap(0), yMap(startBeatHz) - 18);
+  ctx.fillText(formatTimeLabel(0), xMap(0), yMap(startBeatHz) - 7);
+
+  // Labels for other points
+  cumulativeTime = 0;
+  for (const stage of stages) {
+      if (stage.duration === 0) continue;
+      cumulativeTime += stage.duration;
+      const beat = getBeatAt(cumulativeTime, opts);
+      const x = xMap(cumulativeTime);
+      const y = yMap(beat);
+      ctx.fillText(`${beat.toFixed(1)}Hz`, x, y - 18);
+      ctx.fillText(formatTimeLabel(cumulativeTime), x, y - 7);
+  }
+
   // Draw Progress Indicator
   const t = Math.min(elapsed, totalDuration);
   const x = xMap(t);
@@ -486,6 +516,10 @@ function updatePreview() {
   });
 });
 totalPointsInput.addEventListener('input', updateTotalPointsUI);
+
+editPointSelector.addEventListener('change', () => {
+    loadPoint(+editPointSelector.value);
+});
 
 q('saveBtn').addEventListener('click', exportToWav);
 
