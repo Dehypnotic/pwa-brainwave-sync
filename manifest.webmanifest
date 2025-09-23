@@ -1,6 +1,6 @@
 {
-  "name": "Brainwave Sync (isochronic)",
-  "short_name": "BrainwaveSync(isc)",
+  "name": "Brainwave Sync",
+  "short_name": "BrainwaveSync",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
