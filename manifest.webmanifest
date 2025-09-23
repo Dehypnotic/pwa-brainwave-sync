@@ -6,7 +6,7 @@
   "display": "standalone",
   "background_color": "#0b1220",
   "theme_color": "#111827",
-  "description": "Isochronic brainwave sync with Web Audio + time graph. Offline and installable.",
+  "description": "Isochronic brainwave sync with dynamic temporal settings, presets, and graph.",
   "icons": [
     {
       "src": "icons/icon-192.png",
@@ -23,5 +23,6 @@
       "sizes": "512x512",
       "type": "image/png"
     }
-  ]
+  ],
+  "id": "BrainwaveSync"
 }
