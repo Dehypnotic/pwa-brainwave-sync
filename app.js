@@ -308,6 +308,7 @@ const singlePointMinutesInput = q('singlePointMinutes');
 const endActionInput = q('endAction');
 const exportSampleRateInput = q('exportSampleRate');
 const togglePlaybackBtn = q('togglePlaybackBtn');
+const presetDescription = q('presetDescription');
 
 let engine = null;
 let currentEditingPoint = 2;
@@ -318,6 +319,7 @@ let activePresetIndex = 0;
 
 const defaultPreset = {
   name: 'Default',
+  description: '',
   carrierHz: 400,
   startBeatHz: 7,
   totalPoints: 1,
@@ -386,12 +388,12 @@ function saveActivePresetIndex() {
 
 function loadPresetsAndState() {
   const initialDefaultPresets = [
-      { ...defaultPreset, name: 'Preset 1' },
-      { ...defaultPreset, name: 'Preset 2', startBeatHz: 10, stages: [{ beat: 5, hours: 0, minutes: 30 }] },
-      { ...defaultPreset, name: 'Preset 3', startBeatHz: 4, stages: [{ beat: 8, hours: 0, minutes: 45 }] },
-      { ...defaultPreset, name: 'Preset 4', carrierHz: 200, startBeatHz: 6, totalPoints: 2, stages: [{ beat: 12, hours: 0, minutes: 20 }] },
-      { ...defaultPreset, name: 'Preset 5', carrierHz: 600, startBeatHz: 8, totalPoints: 3, stages: [{ beat: 4, hours: 0, minutes: 15 }, { beat: 10, hours: 0, minutes: 15 }] },
-      { ...defaultPreset, name: 'Preset 6', startBeatHz: 7.83, singlePointHours: 1, singlePointMinutes: 0 }, // Schumann Resonance
+      { ...defaultPreset, name: 'Preset 1', description: 'A standard default preset.' },
+      { ...defaultPreset, name: 'Preset 2', description: 'From 10Hz down to 5Hz over 30 minutes.', startBeatHz: 10, stages: [{ beat: 5, hours: 0, minutes: 30 }] },
+      { ...defaultPreset, name: 'Preset 3', description: 'From 4Hz up to 8Hz over 45 minutes.', startBeatHz: 4, stages: [{ beat: 8, hours: 0, minutes: 45 }] },
+      { ...defaultPreset, name: 'Preset 4', description: 'Low carrier, short session.', carrierHz: 200, startBeatHz: 6, totalPoints: 2, stages: [{ beat: 12, hours: 0, minutes: 20 }] },
+      { ...defaultPreset, name: 'Preset 5', description: 'High carrier, multi-stage session.', carrierHz: 600, startBeatHz: 8, totalPoints: 3, stages: [{ beat: 4, hours: 0, minutes: 15 }, { beat: 10, hours: 0, minutes: 15 }] },
+      { ...defaultPreset, name: 'Preset 6', description: 'Schumann Resonance at 7.83Hz for 1 hour.', startBeatHz: 7.83, singlePointHours: 1, singlePointMinutes: 0 }, // Schumann Resonance
     ];
 
   const storedPresets = localStorage.getItem('brainwavePresets');
@@ -404,6 +406,12 @@ function loadPresetsAndState() {
       }
       savePresets(); // Save the updated presets to localStorage
     }
+    // Ensure all loaded presets have a description field
+    presets.forEach(p => {
+        if (p.description === undefined) {
+            p.description = '';
+        }
+    });
   } else {
     presets = initialDefaultPresets;
     savePresets();
@@ -438,8 +446,13 @@ function renderPresetButtons() {
       const newName = prompt('Enter new preset name:', preset.name);
       if (newName && newName.trim() !== '') {
         preset.name = newName.trim();
+        const newDescription = prompt('Enter new description:', preset.description || '');
+        if (newDescription !== null) { // Allow empty description
+            preset.description = newDescription.trim();
+        }
         savePresets();
         renderPresetButtons();
+        updateUIFromPreset(presets[activePresetIndex]); // Update description display
       }
     });
     presetsContainer.appendChild(button);
@@ -565,6 +578,7 @@ function updateUIFromPreset(preset) {
   q('endAction').value = preset.endAction;
   q('exportSampleRate').value = preset.exportSampleRate;
   q('mute').checked = preset.muted;
+  presetDescription.textContent = preset.description || '';
 
   totalPointsInput.value = preset.totalPoints;
   singlePointHoursInput.value = preset.singlePointHours;
