@@ -1,6 +1,6 @@
 {
-  "name": "Brainwave Sync (Dehypnotic)",
-  "short_name": "BrainwaveSync",
+  "name": "Brainwave Sync (isochronic)",
+  "short_name": "BrainwaveSync(isc)",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
