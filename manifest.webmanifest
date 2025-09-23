@@ -4,6 +4,7 @@
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
+  "orientation": "landscape",
   "background_color": "#0b1220",
   "theme_color": "#111827",
   "description": "Isochronic brainwave sync with dynamic temporal settings, presets, and graph.",
