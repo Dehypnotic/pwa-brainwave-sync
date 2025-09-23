@@ -5,6 +5,7 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "landscape",
+  "lang": "en",
   "background_color": "#0b1220",
   "theme_color": "#111827",
   "description": "Isochronic brainwave sync with dynamic temporal settings, presets, and graph.",
@@ -30,11 +31,32 @@
       "src": "images/screenshot1.png",
       "sizes": "1250x835",
       "type": "image/png"
+    },
+    {
+      "src": "images/screenshot2.png",
+      "sizes": "620x907",
+      "type": "image/png"
     }
   ],
   "id": "BrainwaveSync",
   "categories": [
     "health",
     "lifestyle"
+  ],
+  "shortcuts": [
+    {
+      "name": "Start New Session",
+      "short_name": "New Session",
+      "description": "Start a new brainwave synchronization session",
+      "url": "./?action=new",
+      "icons": [{"src": "icons/icon-192.png", "sizes": "192x192"}]
+    },
+    {
+      "name": "Open Presets",
+      "short_name": "Presets",
+      "description": "Access saved brainwave synchronization presets",
+      "url": "./?action=presets",
+      "icons": [{"src": "icons/icon-192.png", "sizes": "192x192"}]
+    }
   ]
 }
