@@ -364,9 +364,13 @@ function updateTotalPointsUI() {
         pointEditor.style.display = 'flex';
         singlePointDurationContainer.style.display = 'none';
         editPointSelector.max = total;
-        if (+editPointSelector.value > total) {
-            editPointSelector.value = total;
-            loadPoint(total);
+        // Ensure editPointSelector is set to a valid point, defaulting to 2 if total is 2
+        if (+editPointSelector.value > total || (+editPointSelector.value === 1 && total >= 2)) {
+            editPointSelector.value = 2;
+            loadPoint(2);
+        } else if (total === 2 && +editPointSelector.value !== 2) {
+            editPointSelector.value = 2;
+            loadPoint(2);
         }
     }
 }
@@ -381,12 +385,7 @@ function saveActivePresetIndex() {
 }
 
 function loadPresetsAndState() {
-  const storedPresets = localStorage.getItem('brainwavePresets');
-  if (storedPresets) {
-    presets = JSON.parse(storedPresets);
-  } else {
-    // Create initial presets if none exist
-    presets = [
+  const initialDefaultPresets = [
       { ...defaultPreset, name: 'Preset 1' },
       { ...defaultPreset, name: 'Preset 2', startBeatHz: 10, stages: [{ beat: 5, hours: 0, minutes: 30 }] },
       { ...defaultPreset, name: 'Preset 3', startBeatHz: 4, stages: [{ beat: 8, hours: 0, minutes: 45 }] },
@@ -394,6 +393,19 @@ function loadPresetsAndState() {
       { ...defaultPreset, name: 'Preset 5', carrierHz: 600, startBeatHz: 8, totalPoints: 3, stages: [{ beat: 4, hours: 0, minutes: 15 }, { beat: 10, hours: 0, minutes: 15 }] },
       { ...defaultPreset, name: 'Preset 6', startBeatHz: 7.83, singlePointHours: 1, singlePointMinutes: 0 }, // Schumann Resonance
     ];
+
+  const storedPresets = localStorage.getItem('brainwavePresets');
+  if (storedPresets) {
+    presets = JSON.parse(storedPresets);
+    // Add any new default presets that might have been added in a new version
+    if (presets.length < initialDefaultPresets.length) {
+      for (let i = presets.length; i < initialDefaultPresets.length; i++) {
+        presets.push(initialDefaultPresets[i]);
+      }
+      savePresets(); // Save the updated presets to localStorage
+    }
+  } else {
+    presets = initialDefaultPresets;
     savePresets();
   }
 
