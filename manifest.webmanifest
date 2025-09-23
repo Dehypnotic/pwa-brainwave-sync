@@ -24,5 +24,12 @@
       "type": "image/png"
     }
   ],
+  "screenshots": [
+    {
+      "src": "images/screenshot1.png",
+      "sizes": "1250x835",
+      "type": "image/png"
+    }
+  ],
   "id": "BrainwaveSync"
 }
