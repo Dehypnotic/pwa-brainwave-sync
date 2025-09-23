@@ -32,5 +32,9 @@
       "type": "image/png"
     }
   ],
-  "id": "BrainwaveSync"
+  "id": "BrainwaveSync",
+  "categories": [
+    "health",
+    "lifestyle"
+  ]
 }
