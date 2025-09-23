@@ -564,12 +564,12 @@ async function exportToWav() {
   const opts = getOpts();
   const totalDuration = getTotalDuration(opts);
   if (totalDuration <= 0) {
-    alert("Kan ikke lagre en økt med 0 sekunders varighet.");
+    alert("Cannot save a session with 0 seconds duration.");
     return;
   }
 
   const originalBtnText = q('saveBtn').textContent;
-  q('saveBtn').textContent = 'Genererer...';
+  q('saveBtn').textContent = 'Generating...';
   q('saveBtn').disabled = true;
 
   try {
@@ -607,11 +607,11 @@ async function exportToWav() {
     anchor.download = 'brainwave_session.wav';
     anchor.click();
     URL.revokeObjectURL(anchor.href);
-    alert('WAV-fil lagret.');
+    alert('WAV file saved.');
 
   } catch (e) {
-    console.error('Feil ved lagring av WAV:', e);
-    alert('En feil oppsto under generering av lydfilen: ' + e.message);
+    console.error('Error saving WAV:', e);
+    alert('An error occurred while generating the audio file: ' + e.message);
   } finally {
     q('saveBtn').textContent = originalBtnText;
     q('saveBtn').disabled = false;
@@ -700,7 +700,9 @@ function updatePreview() {
     if (engine && engine.started) return;
     const opts = getOpts();
     drawSchedule(sched, opts, 0);
-    readout.textContent = `Kjører: nei\nForløpt: 0.0 min\nBeat nå: ${opts.startBeatHz.toFixed(2)} Hz`;
+    readout.textContent = `Running: no
+Elapsed: 0.0 min
+Beat now: ${opts.startBeatHz.toFixed(2)} Hz`;
 }
 
 // --- Event Listeners ---
@@ -747,11 +749,11 @@ togglePlaybackBtn.onclick = async () => {
       engine = new BrainwaveIso(getOpts());
       await engine.ctx.resume();
       engine.start();
-      togglePlaybackBtn.textContent = 'Stopp';
+      togglePlaybackBtn.textContent = 'Stop';
       togglePlaybackBtn.classList.add('secondary');
     } catch (e) {
       console.error(e);
-      alert('Kunne ikke starte: ' + e.message);
+      alert('Could not start: ' + e.message);
       togglePlaybackBtn.textContent = 'Start';
       togglePlaybackBtn.classList.remove('secondary');
     }
@@ -761,7 +763,9 @@ togglePlaybackBtn.onclick = async () => {
 function loop() {
   if (engine && engine.started) {
     drawSchedule(sched, engine.opts, engine.elapsed());
-    readout.textContent = `Kjører: ja\nForløpt: ${(engine.elapsed()/60).toFixed(1)} min\nBeat nå: ${getBeatAt(engine.elapsed(), engine.opts).toFixed(2)} Hz`;
+    readout.textContent = `Running: yes
+Elapsed: ${(engine.elapsed()/60).toFixed(1)} min
+Beat now: ${getBeatAt(engine.elapsed(), engine.opts).toFixed(2)} Hz`;
   }
   requestAnimationFrame(loop);
 }
