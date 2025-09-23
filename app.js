@@ -310,8 +310,16 @@ const exportSampleRateInput = q('exportSampleRate');
 const togglePlaybackBtn = q('togglePlaybackBtn');
 const presetDescription = q('presetDescription');
 
+// Modal elements
+const renamePresetModal = q('renamePresetModal');
+const renamePresetForm = q('renamePresetForm');
+const presetNameInput = q('presetNameInput');
+const presetDescriptionInput = q('presetDescriptionInput');
+const cancelPresetNameBtn = q('cancelPresetNameBtn');
+
 let engine = null;
 let currentEditingPoint = 2;
+let currentEditingPresetIndex = -1;
 
 const presetsContainer = q('presetsContainer');
 let presets = [];
@@ -393,7 +401,6 @@ function loadPresetsAndState() {
       { ...defaultPreset, name: 'Preset 3', description: 'From 4Hz up to 8Hz over 45 minutes.', startBeatHz: 4, stages: [{ beat: 8, hours: 0, minutes: 45 }] },
       { ...defaultPreset, name: 'Preset 4', description: 'Low carrier, short session.', carrierHz: 200, startBeatHz: 6, totalPoints: 2, stages: [{ beat: 12, hours: 0, minutes: 20 }] },
       { ...defaultPreset, name: 'Preset 5', description: 'High carrier, multi-stage session.', carrierHz: 600, startBeatHz: 8, totalPoints: 3, stages: [{ beat: 4, hours: 0, minutes: 15 }, { beat: 10, hours: 0, minutes: 15 }] },
-      { ...defaultPreset, name: 'Preset 6', description: 'Schumann Resonance at 7.83Hz for 1 hour.', startBeatHz: 7.83, singlePointHours: 1, singlePointMinutes: 0 }, // Schumann Resonance
     ];
 
   const storedPresets = localStorage.getItem('brainwavePresets');
@@ -426,6 +433,33 @@ function loadPresetsAndState() {
   }
 }
 
+function openRenameModal(index) {
+  currentEditingPresetIndex = index;
+  const preset = presets[index];
+  presetNameInput.value = preset.name;
+  presetDescriptionInput.value = preset.description || '';
+  renamePresetModal.style.display = 'flex';
+  presetNameInput.focus();
+}
+
+function closeRenameModal() {
+  renamePresetModal.style.display = 'none';
+}
+
+function handleRenamePreset(event) {
+  event.preventDefault();
+  const newName = presetNameInput.value;
+  if (newName && newName.trim() !== '') {
+    const preset = presets[currentEditingPresetIndex];
+    preset.name = newName.trim();
+    preset.description = presetDescriptionInput.value.trim();
+    savePresets();
+    renderPresetButtons();
+    updateUIFromPreset(presets[activePresetIndex]); // Update description display
+    closeRenameModal();
+  }
+}
+
 function renderPresetButtons() {
   presetsContainer.innerHTML = ''; // Clear existing buttons
   presets.forEach((preset, index) => {
@@ -435,26 +469,40 @@ function renderPresetButtons() {
       button.classList.add('active');
     }
     button.textContent = preset.name;
-    button.addEventListener('click', () => {
+
+    let pressTimer = null;
+    let longPress = false;
+
+    button.addEventListener('mousedown', (e) => {
+      longPress = false;
+      pressTimer = setTimeout(() => {
+        longPress = true;
+        openRenameModal(index);
+      }, 750);
+    });
+
+    button.addEventListener('mouseup', () => {
+      clearTimeout(pressTimer);
+    });
+
+    button.addEventListener('mouseleave', () => {
+      clearTimeout(pressTimer);
+    });
+
+    button.addEventListener('click', (e) => {
+      if (longPress) {
+        e.preventDefault();
+        return;
+      }
       activePresetIndex = index;
       saveActivePresetIndex();
       updateUIFromPreset(presets[activePresetIndex]);
       renderPresetButtons(); // Re-render to highlight active button
       updatePreview();
     });
-    button.addEventListener('dblclick', () => {
-      const newName = prompt('Enter new preset name:', preset.name);
-      if (newName && newName.trim() !== '') {
-        preset.name = newName.trim();
-        const newDescription = prompt('Enter new description:', preset.description || '');
-        if (newDescription !== null) { // Allow empty description
-            preset.description = newDescription.trim();
-        }
-        savePresets();
-        renderPresetButtons();
-        updateUIFromPreset(presets[activePresetIndex]); // Update description display
-      }
-    });
+
+    button.addEventListener('dblclick', () => openRenameModal(index));
+
     presetsContainer.appendChild(button);
   });
 }
@@ -682,6 +730,9 @@ editPointSelector.addEventListener('change', () => {
 q('saveBtn').addEventListener('click', exportToWav);
 
 q('mute').addEventListener('change', e => { if (engine) engine.setMute(e.target.checked); });
+
+renamePresetForm.addEventListener('submit', handleRenamePreset);
+cancelPresetNameBtn.addEventListener('click', closeRenameModal);
 
 togglePlaybackBtn.onclick = async () => {
   if (engine && engine.started) {

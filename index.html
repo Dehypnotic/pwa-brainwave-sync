@@ -13,6 +13,7 @@
     .wrap { max-width: 1000px; margin: 0 auto; }
     .card { padding: 1.25rem; border-radius: 16px; background:#111827; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
     h1, h2 { margin: .25rem 0 .75rem; }
+    .param-title { margin-top: 0; }
     .row { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
     .col { display:flex; gap:.75rem; align-items:center; flex-wrap:wrap; }
     
@@ -26,13 +27,26 @@
       font-size: 1rem;
     }
     input[type='checkbox'] { transform: translateY(1px); }
-    button { padding:.6rem 1rem; border-radius:12px; border:0; cursor:pointer; background:#2563eb; color:white; font-weight:600; }
+    button { padding:.3rem .6rem; border-radius:12px; border:0; cursor:pointer; background:#2563eb; color:white; font-weight:600; }
     button.secondary { background:#334155; }
     button.preset-btn.active { background: #60a5fa; }
+    .preset-btn {
+      width: 100px;
+      text-align: center;
+      white-space: normal;
+      word-wrap: break-word;
+    }
     small.muted { opacity:.8 }
-    canvas { background:#0b1220; border-radius: 12px; display:block; width:100%; height:260px; }
+    canvas { background:#0b1220; border-radius: 12px; display:block; width:100%; height:350px; }
     pre { white-space:pre-wrap; background:#0b1220; padding:.75rem; border-radius:.75rem; overflow:auto; }
     
+    .header-grid {
+      display: grid;
+      grid-template-columns: 1.4fr .6fr;
+      gap: 1rem;
+      align-items: baseline;
+    }
+
     .grid {
       display: grid;
       grid-template-columns: 1fr;
@@ -62,27 +76,46 @@
     #pointEditor .param-row { padding: .3rem 0; }
 
     @media (min-width: 840px) { .grid { grid-template-columns: 1.4fr .6fr; } }
+
+    /* Modal Styles */
+    .modal-backdrop { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center; z-index: 1000; }
+    .modal-content { background: #111827; padding: 1.5rem; border-radius: 16px; width: 90%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    .modal-content h2 { margin-top: 0; }
+    .modal-content .param-row { margin-bottom: 1rem; }
+    .modal-content .input-wrapper { width: 100%; }
+    .modal-content input[type='text'] { width: 100%; background: transparent; color: #e5e7eb; border: 0; outline: none; font-size: 1rem; }
+    .modal-buttons { display: flex; justify-content: flex-end; gap: .75rem; margin-top: 1.5rem; }
+
+    #togglePlaybackBtn {
+      width: 100px;
+      background-color: #16a34a; /* Green */
+    }
+
+    #togglePlaybackBtn.secondary {
+      background-color: #dc2626; /* Red */
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <h1>🧠 Brainwave Sync (isochronic)</h1>
+      <div class="header-grid">
+        <h1>🧠 Brainwave Sync (isochronic)</h1>
+        <h2 class="param-title">Parametre</h2>
+      </div>
       
       <div class="grid">
         <div>
-          <h2>Plan & live</h2>
-          <canvas id="sched" width="1000" height="260"></canvas>
+          <canvas id="sched" width="1000" height="350"></canvas>
                     <div class="row" style="margin-top:.5rem">
             <button id="togglePlaybackBtn">Start</button>
-            <div id="presetsContainer" class="row" style="flex-grow: 1; justify-content: flex-end;"></div>
+            <div id="presetsContainer" class="row" style="flex-grow: 1; justify-content: center;"></div>
           </div>
           <p id="presetDescription" style="margin-top:.5rem; color: #94a3b8;"></p>
           <pre id="readout" style="margin-top:.5rem"></pre>
         </div>
         
         <div>
-          <h2>Parametre</h2>
           <div id="paramsContainer" style="display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; width: 100%;">
             
             <div class="param-row">
@@ -178,7 +211,29 @@
         </div>
       </div>
 
-      <p><small class="muted">Bygget: 2025-09-21 19:07</small></p>
+    </div>
+  </div>
+  <div id="renamePresetModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-content">
+      <h2>Rediger Forhåndsinnstilling</h2>
+      <form id="renamePresetForm">
+        <div class="param-row">
+          <label for="presetNameInput" class="param-label">Navn</label>
+          <div class="input-wrapper">
+            <input id="presetNameInput" type="text" required>
+          </div>
+        </div>
+        <div class="param-row">
+          <label for="presetDescriptionInput" class="param-label">Beskrivelse</label>
+          <div class="input-wrapper">
+            <input id="presetDescriptionInput" type="text">
+          </div>
+        </div>
+        <div class="modal-buttons">
+          <button type="submit" id="savePresetNameBtn">Lagre</button>
+          <button type="button" id="cancelPresetNameBtn" class="secondary">Avbryt</button>
+        </div>
+      </form>
     </div>
   </div>
   <script type="module" src="app.js"></script>
