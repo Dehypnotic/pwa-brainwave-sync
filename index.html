@@ -207,7 +207,7 @@
             </div>
 
           </div>
-          <p><small class="muted">Disclaimer: This app is for relaxation and entertainment purposes only. Brainwave sessions may induce drowsiness or other altered states of awareness. Do not use while driving or in situations requiring full alertness. Any use on user's responsibility</small></p>
+          
         </div>
       </div>
 
@@ -237,8 +237,11 @@
     </div>
   </div>
   <script type="module" src="app.js"></script>
-  <script>
-    if ('serviceWorker' in navigator) { navigator.serviceWorker.register('./sw.js'); }
+    <script>
+    if ('serviceWorker'in navigator) { navigator.serviceWorker.register('./sw.js'); }
   </script>
+  <footer style="position: fixed; bottom: 0; left: 0; padding: 1rem; font-size: 0.8rem; color: #94a3b8;">
+  </footer>
+</body>
 </body>
 </html>
