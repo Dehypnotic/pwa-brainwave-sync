@@ -288,6 +288,115 @@ class BrainwaveIso {
 }
 
 // ====================================================================
+// Binaural Audio Engine Class
+// ====================================================================
+
+class BrainwaveBinaural {
+  constructor(opts) {
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+    this.opts = opts;
+    this.totalDuration = getTotalDuration(opts);
+    this.started = false;
+    this.nodes = {};
+    this.updateTimer = null;
+  }
+
+  _build() {
+    const o = this.opts;
+    const outGain = this.ctx.createGain();
+    outGain.gain.value = 0;
+
+    // Left channel
+    const oscL = this.ctx.createOscillator();
+    oscL.type = 'sine';
+    oscL.frequency.value = o.carrierHz;
+    const pannerL = this.ctx.createStereoPanner();
+    pannerL.pan.value = -1; // Hard left
+
+    // Right channel
+    const oscR = this.ctx.createOscillator();
+    oscR.type = 'sine';
+    const startBeat = getBeatAt(0, o);
+    oscR.frequency.value = o.carrierHz + startBeat;
+    const pannerR = this.ctx.createStereoPanner();
+    pannerR.pan.value = 1; // Hard right
+
+    oscL.connect(pannerL).connect(outGain);
+    oscR.connect(pannerR).connect(outGain);
+    outGain.connect(this.ctx.destination);
+
+    oscL.start();
+    oscR.start();
+
+    this.nodes = { oscL, oscR, pannerL, pannerR, outGain };
+    this.t0 = this.ctx.currentTime;
+  }
+
+  start() {
+    if (this.started) return;
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+    this._build();
+    const t = this.ctx.currentTime;
+    try {
+      if (!this.opts.muted) {
+        this.nodes.outGain.gain.setTargetAtTime(1.0, t, 0.05);
+      }
+    } catch {} // Ignore errors
+    this.started = true;
+    this.scheduleUpdates(this.ctx.currentTime);
+  }
+
+  stop() {
+    if (!this.started) return;
+    this.started = false;
+    if (this.updateTimer) {
+      clearTimeout(this.updateTimer);
+      this.updateTimer = null;
+    }
+    const t = this.ctx.currentTime;
+    try {
+      this.nodes.outGain.gain.setTargetAtTime(0.0001, t, 0.05);
+    } catch {} // Ignore errors
+    setTimeout(() => {
+      Object.values(this.nodes).forEach(n => { try { n.stop?.(); n.disconnect?.(); } catch{} });
+      this.nodes = {};
+    }, 200);
+  }
+
+  scheduleUpdates() {
+    if (!this.started) return;
+
+    const elapsed = this.ctx.currentTime - this.t0;
+    
+    if (this.opts.endAction !== 'hold' && elapsed > this.totalDuration) {
+      this.stop();
+      requestAnimationFrame(() => { q('togglePlaybackBtn').textContent = 'Start'; });
+      return;
+    }
+
+    const beatHz = getBeatAt(elapsed, this.opts);
+    const newFreq = this.opts.carrierHz + beatHz;
+
+    // Use a ramp to avoid clicks
+    if (this.nodes.oscR) {
+        this.nodes.oscR.frequency.linearRampToValueAtTime(newFreq, this.ctx.currentTime + 0.1);
+    }
+    
+    this.updateTimer = setTimeout(() => this.scheduleUpdates(), 100);
+  }
+
+  setMute(m) {
+    this.opts.muted = m;
+    if (this.nodes.outGain) {
+      const targetGain = m ? 0 : 1;
+      try { this.nodes.outGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05); } catch {}
+    }
+  }
+
+  elapsed() { return this.started ? (this.ctx.currentTime - this.t0) : 0; }
+}
+
+// ====================================================================
 // UI and Application Logic
 // ====================================================================
 
@@ -309,6 +418,7 @@ const endActionInput = q('endAction');
 const exportSampleRateInput = q('exportSampleRate');
 const togglePlaybackBtn = q('togglePlaybackBtn');
 const presetDescription = q('presetDescription');
+const beatModeInput = q('beatMode');
 
 // Modal elements
 const renamePresetModal = q('renamePresetModal');
@@ -337,6 +447,7 @@ const defaultPreset = {
   endAction: 'hold',
   exportSampleRate: 44100,
   muted: false,
+  beatMode: 'isochronic', // Add beatMode
 };
 
 // --- Point Editor Logic ---
@@ -413,10 +524,13 @@ function loadPresetsAndState() {
       }
       savePresets(); // Save the updated presets to localStorage
     }
-    // Ensure all loaded presets have a description field
+    // Ensure all loaded presets have a description and beatMode field
     presets.forEach(p => {
         if (p.description === undefined) {
             p.description = '';
+        }
+        if (p.beatMode === undefined) {
+            p.beatMode = 'isochronic';
         }
     });
   } else {
@@ -574,29 +688,68 @@ async function exportToWav() {
 
   try {
     const sampleRate = opts.exportSampleRate;
-    const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(1, totalDuration * sampleRate, sampleRate);
+    const isBinaural = opts.beatMode === 'binaural';
+    const numChannels = isBinaural ? 2 : 1;
+    const offlineCtx = new (window.OfflineAudioContext || window.webkitOfflineAudioContext)(numChannels, totalDuration * sampleRate, sampleRate);
 
-    const carrier = offlineCtx.createOscillator();
-    carrier.type = 'sine';
-    carrier.frequency.value = opts.carrierHz;
-    const pulseGain = offlineCtx.createGain();
-    pulseGain.gain.value = 0;
-    carrier.connect(pulseGain).connect(offlineCtx.destination);
-    carrier.start();
+    if (isBinaural) {
+      // --- Binaural WAV Export ---
+      const outGain = offlineCtx.createGain(); // Use a gain node for master control
+      outGain.connect(offlineCtx.destination);
+      
+      const oscL = offlineCtx.createOscillator();
+      oscL.type = 'sine';
+      oscL.frequency.value = opts.carrierHz;
+      const pannerL = offlineCtx.createStereoPanner();
+      pannerL.pan.value = -1;
+      oscL.connect(pannerL).connect(outGain);
 
-    let currentTime = 0;
-    while (currentTime < totalDuration) {
-      const beatHz = getBeatAt(currentTime, opts);
-      if (beatHz <= 0) { currentTime += 0.1; continue; }
-      const period = 1 / beatHz;
-      const pulseDuration = period / 2;
-      const peakTime = currentTime + pulseDuration / 2;
-      const endTime = currentTime + pulseDuration;
-      if (endTime > totalDuration) break;
-      pulseGain.gain.setValueAtTime(0, currentTime);
-      pulseGain.gain.linearRampToValueAtTime(1, peakTime);
-      pulseGain.gain.linearRampToValueAtTime(0, endTime);
-      currentTime += period;
+      const oscR = offlineCtx.createOscillator();
+      oscR.type = 'sine';
+      const pannerR = offlineCtx.createStereoPanner();
+      pannerR.pan.value = 1;
+      oscR.connect(pannerR).connect(outGain);
+
+      oscL.start(0);
+      oscR.start(0);
+
+      // Schedule frequency changes for the right oscillator
+      let currentTime = 0;
+      const timeStep = 0.1; // Update frequency every 100ms
+      while (currentTime < totalDuration) {
+          const beatHz = getBeatAt(currentTime, opts);
+          const newFreq = opts.carrierHz + beatHz;
+          oscR.frequency.setValueAtTime(newFreq, currentTime);
+          currentTime += timeStep;
+      }
+      // Ensure the last frequency is held
+      const lastBeat = getBeatAt(totalDuration, opts);
+      oscR.frequency.setValueAtTime(opts.carrierHz + lastBeat, totalDuration);
+
+    } else {
+      // --- Isochronic WAV Export (Original) ---
+      const carrier = offlineCtx.createOscillator();
+      carrier.type = 'sine';
+      carrier.frequency.value = opts.carrierHz;
+      const pulseGain = offlineCtx.createGain();
+      pulseGain.gain.value = 0;
+      carrier.connect(pulseGain).connect(offlineCtx.destination);
+      carrier.start();
+
+      let currentTime = 0;
+      while (currentTime < totalDuration) {
+        const beatHz = getBeatAt(currentTime, opts);
+        if (beatHz <= 0) { currentTime += 0.1; continue; }
+        const period = 1 / beatHz;
+        const pulseDuration = period / 2;
+        const peakTime = currentTime + pulseDuration / 2;
+        const endTime = currentTime + pulseDuration;
+        if (endTime > totalDuration) break;
+        pulseGain.gain.setValueAtTime(0, currentTime);
+        pulseGain.gain.linearRampToValueAtTime(1, peakTime);
+        pulseGain.gain.linearRampToValueAtTime(0, endTime);
+        currentTime += period;
+      }
     }
 
     const renderedBuffer = await offlineCtx.startRendering();
@@ -604,10 +757,13 @@ async function exportToWav() {
     const blob = new Blob([wavData], { type: 'audio/wav' });
     const anchor = document.createElement('a');
     anchor.href = URL.createObjectURL(blob);
-    anchor.download = 'brainwave_session.wav';
+    
+    const presetName = presets[activePresetIndex].name.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+    anchor.download = `bws_${presetName}_${opts.beatMode}.wav`;
+
     anchor.click();
     URL.revokeObjectURL(anchor.href);
-    alert('WAV file saved.');
+    // No alert, as the download starts automatically. The user will see it in their browser.
 
   } catch (e) {
     console.error('Error saving WAV:', e);
@@ -626,6 +782,7 @@ function updateUIFromPreset(preset) {
   q('endAction').value = preset.endAction;
   q('exportSampleRate').value = preset.exportSampleRate;
   q('mute').checked = preset.muted;
+  beatModeInput.value = preset.beatMode || 'isochronic'; // Set beat mode
   presetDescription.textContent = preset.description || '';
 
   totalPointsInput.value = preset.totalPoints;
@@ -652,6 +809,7 @@ function updateActivePresetFromUI() {
   currentPreset.endAction = q('endAction').value;
   currentPreset.exportSampleRate = +q('exportSampleRate').value;
   currentPreset.muted = q('mute').checked;
+  currentPreset.beatMode = beatModeInput.value; // Get beat mode
 
   currentPreset.totalPoints = +totalPointsInput.value;
   currentPreset.singlePointHours = +singlePointHoursInput.value;
@@ -693,6 +851,7 @@ const getOpts = () => {
     muted: currentPreset.muted,
     endAction: currentPreset.endAction,
     exportSampleRate: currentPreset.exportSampleRate,
+    beatMode: currentPreset.beatMode || 'isochronic',
   };
 };
 
@@ -706,7 +865,7 @@ Beat now: ${opts.startBeatHz.toFixed(2)} Hz`;
 }
 
 // --- Event Listeners ---
-[q('carrier'), q('startBeat'), endActionInput, exportSampleRateInput, q('mute'), singlePointHoursInput, singlePointMinutesInput].forEach(input => {
+[q('carrier'), q('startBeat'), endActionInput, exportSampleRateInput, q('mute'), singlePointHoursInput, singlePointMinutesInput, beatModeInput].forEach(input => {
     input.addEventListener('change', () => {
         updateActivePresetFromUI();
         updatePreview();
@@ -746,7 +905,12 @@ togglePlaybackBtn.onclick = async () => {
   } else {
     try {
       if (engine) engine.stop();
-      engine = new BrainwaveIso(getOpts());
+      const opts = getOpts();
+      if (opts.beatMode === 'binaural') {
+        engine = new BrainwaveBinaural(opts);
+      } else {
+        engine = new BrainwaveIso(opts);
+      }
       await engine.ctx.resume();
       engine.start();
       togglePlaybackBtn.textContent = 'Stop';
