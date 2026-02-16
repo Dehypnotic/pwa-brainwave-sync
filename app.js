@@ -178,9 +178,10 @@ class BrainwaveIso {
     this.started = false;
     this.nodes = {};
     this.pulseTimer = null;
+    this.pausedTime = 0;
   }
 
-  _build() {
+  _build(offset = 0) {
     const o = this.opts;
     const carrier = this.ctx.createOscillator();
     carrier.type = 'sine';
@@ -197,13 +198,13 @@ class BrainwaveIso {
     carrier.start();
 
     this.nodes = {carrier, outGain, pulseGain};
-    this.t0 = this.ctx.currentTime;
+    this.t0 = this.ctx.currentTime - offset;
   }
 
-  start() {
+  start(offset = 0) {
     if (this.started) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
-    this._build();
+    this._build(offset);
     const t = this.ctx.currentTime;
     try {
       if (!this.opts.muted) {
@@ -212,6 +213,13 @@ class BrainwaveIso {
     } catch {} // Ignore errors
     this.started = true;
     this.schedulePulses(this.ctx.currentTime);
+  }
+
+  pause() {
+    if (!this.started) return;
+    this.pausedTime = this.elapsed();
+    this.stop();
+    this.started = false; // engine.stop() sets it to false, but we want to be explicit for our internal state if needed
   }
 
   stop() {
@@ -239,8 +247,11 @@ class BrainwaveIso {
     const elapsed = now - this.t0;
 
     if (this.opts.endAction !== 'hold' && elapsed > this.totalDuration) {
-        this.stop();
-        requestAnimationFrame(() => { q('togglePlaybackBtn').textContent = 'Start'; });
+        if (typeof stopAllPlayback === 'function') stopAllPlayback();
+        else {
+          this.stop();
+          requestAnimationFrame(() => { q('togglePlaybackBtn').textContent = 'Start'; });
+        }
         return;
     }
 
@@ -252,8 +263,11 @@ class BrainwaveIso {
       const beatHz = getBeatAt(currentElapsed, this.opts);
       if (beatHz <= 0) {
           if (this.opts.endAction !== 'hold' && currentElapsed > this.totalDuration) {
-              this.stop();
-              requestAnimationFrame(() => { q('togglePlaybackBtn').textContent = 'Start'; });
+              if (typeof stopAllPlayback === 'function') stopAllPlayback();
+              else {
+                this.stop();
+                requestAnimationFrame(() => { q('togglePlaybackBtn').textContent = 'Start'; });
+              }
               return;
           }
           nextPulseTime += 0.5;
@@ -306,9 +320,10 @@ class BrainwaveBinaural {
     this.started = false;
     this.nodes = {};
     this.updateTimer = null;
+    this.pausedTime = 0;
   }
 
-  _build() {
+  _build(offset = 0) {
     const o = this.opts;
     const outGain = this.ctx.createGain();
     outGain.gain.value = 0;
@@ -323,7 +338,7 @@ class BrainwaveBinaural {
     // Right channel
     const oscR = this.ctx.createOscillator();
     oscR.type = 'sine';
-    const startBeat = getBeatAt(0, o);
+    const startBeat = getBeatAt(offset, o);
     oscR.frequency.value = o.carrierHz + startBeat;
     const pannerR = this.ctx.createStereoPanner();
     pannerR.pan.value = 1; // Hard right
@@ -336,13 +351,13 @@ class BrainwaveBinaural {
     oscR.start();
 
     this.nodes = { oscL, oscR, pannerL, pannerR, outGain };
-    this.t0 = this.ctx.currentTime;
+    this.t0 = this.ctx.currentTime - offset;
   }
 
-  start() {
+  start(offset = 0) {
     if (this.started) return;
     if (this.ctx.state === 'suspended') this.ctx.resume();
-    this._build();
+    this._build(offset);
     const t = this.ctx.currentTime;
     try {
       if (!this.opts.muted) {
@@ -351,6 +366,13 @@ class BrainwaveBinaural {
     } catch {} // Ignore errors
     this.started = true;
     this.scheduleUpdates(this.ctx.currentTime);
+  }
+
+  pause() {
+    if (!this.started) return;
+    this.pausedTime = this.elapsed();
+    this.stop();
+    this.started = false;
   }
 
   stop() {
@@ -376,8 +398,11 @@ class BrainwaveBinaural {
     const elapsed = this.ctx.currentTime - this.t0;
     
     if (this.opts.endAction !== 'hold' && elapsed > this.totalDuration) {
-      this.stop();
-      requestAnimationFrame(() => { q('togglePlaybackBtn').textContent = 'Start'; });
+      if (typeof stopAllPlayback === 'function') stopAllPlayback();
+      else {
+        this.stop();
+        requestAnimationFrame(() => { q('togglePlaybackBtn').textContent = 'Start'; });
+      }
       return;
     }
 
@@ -444,6 +469,7 @@ const presetDescriptionInput = q('presetDescriptionInput');
 const cancelPresetNameBtn = q('cancelPresetNameBtn');
 
 let engine = null;
+let pausedTime = 0;
 let currentEditingPoint = 2;
 let currentEditingPresetIndex = -1;
 
@@ -628,6 +654,7 @@ function renderPresetButtons() {
         e.preventDefault();
         return;
       }
+      stopAllPlayback();
       activePresetIndex = index;
       saveActivePresetIndex();
       updateUIFromPreset(presets[activePresetIndex]);
@@ -926,25 +953,63 @@ volumeInput.addEventListener('input', () => {
 renamePresetForm.addEventListener('submit', handleRenamePreset);
 cancelPresetNameBtn.addEventListener('click', closeRenameModal);
 
-togglePlaybackBtn.onclick = async () => {
-  if (engine && engine.started) {
+function stopAllPlayback() {
+  if (engine) {
     engine.stop();
     engine = null;
-    togglePlaybackBtn.textContent = 'Start';
+  }
+  pausedTime = 0;
+  togglePlaybackBtn.textContent = 'Start';
+  togglePlaybackBtn.classList.remove('secondary');
+  updatePreview();
+}
+
+let toggleTimer = null;
+let isLongPress = false;
+
+togglePlaybackBtn.addEventListener('mousedown', () => {
+  isLongPress = false;
+  toggleTimer = setTimeout(() => {
+    isLongPress = true;
+    stopAllPlayback();
+  }, 1000);
+});
+
+togglePlaybackBtn.addEventListener('mouseup', () => {
+    clearTimeout(toggleTimer);
+});
+
+togglePlaybackBtn.addEventListener('mouseleave', () => {
+    clearTimeout(toggleTimer);
+});
+
+togglePlaybackBtn.addEventListener('dblclick', stopAllPlayback);
+
+togglePlaybackBtn.addEventListener('click', async (e) => {
+  if (isLongPress) {
+    e.preventDefault();
+    return;
+  }
+
+  if (engine && engine.started) {
+    pausedTime = engine.elapsed();
+    engine.stop();
+    togglePlaybackBtn.textContent = 'Resume';
     togglePlaybackBtn.classList.remove('secondary');
-    updatePreview();
   } else {
     try {
       if (engine) engine.stop();
       const opts = getOpts();
-      if (opts.beatMode === 'binaural') {
-        engine = new BrainwaveBinaural(opts);
-      } else {
-        engine = new BrainwaveIso(opts);
+      if (!engine || engine.constructor.name !== (opts.beatMode === 'binaural' ? 'BrainwaveBinaural' : 'BrainwaveIso')) {
+          if (opts.beatMode === 'binaural') {
+            engine = new BrainwaveBinaural(opts);
+          } else {
+            engine = new BrainwaveIso(opts);
+          }
       }
       await engine.ctx.resume();
-      engine.start();
-      togglePlaybackBtn.textContent = 'Stop';
+      engine.start(pausedTime);
+      togglePlaybackBtn.textContent = 'Pause';
       togglePlaybackBtn.classList.add('secondary');
     } catch (e) {
       console.error(e);
@@ -953,7 +1018,7 @@ togglePlaybackBtn.onclick = async () => {
       togglePlaybackBtn.classList.remove('secondary');
     }
   }
-};
+});
 
 function loop() {
   if (engine && engine.started) {
