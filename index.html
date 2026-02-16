@@ -114,6 +114,10 @@
           <p id="presetDescription" style="margin-top:.5rem; color: #94a3b8;"></p>
           <div class="row" style="justify-content: space-between; align-items: center; margin-top:.5rem;">
             <pre id="readout" style="margin:0;"></pre>
+            <div class="input-wrapper" style="flex-grow: 1; margin: 0 1rem; display: flex; align-items: center; gap: 0.5rem; min-width: 100px;">
+              <span id="volumeLabel" class="param-unit" style="font-size: 0.8rem; min-width: 2.2rem;">100%</span>
+              <input id="volume" type="range" min="0" max="1" step="0.01" value="1" style="flex-grow: 1; cursor: pointer;">
+            </div>
             <div class="input-wrapper">
               <select id="beatMode" style="background:transparent; color:#e5e7eb; border:0; outline: none; -webkit-appearance: none; appearance: none;">
                 <option value="isochronic" style="background:#0b1220;">Isochronic</option>

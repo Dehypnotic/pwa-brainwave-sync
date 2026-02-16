@@ -207,7 +207,7 @@ class BrainwaveIso {
     const t = this.ctx.currentTime;
     try {
       if (!this.opts.muted) {
-        this.nodes.outGain.gain.setTargetAtTime(1.0, t, 0.05);
+        this.nodes.outGain.gain.setTargetAtTime(this.opts.volume ?? 1.0, t, 0.05);
       }
     } catch {} // Ignore errors
     this.started = true;
@@ -276,10 +276,17 @@ class BrainwaveIso {
     this.pulseTimer = setTimeout(() => this.schedulePulses(nextPulseTime), 100);
   }
 
+  setVolume(v) {
+    this.opts.volume = v;
+    if (this.nodes.outGain && !this.opts.muted) {
+      try { this.nodes.outGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05); } catch {}
+    }
+  }
+
   setMute(m) {
     this.opts.muted = m;
     if (this.nodes.outGain) {
-      const targetGain = m ? 0 : 1;
+      const targetGain = m ? 0 : (this.opts.volume ?? 1.0);
       try { this.nodes.outGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05); } catch {} // Ignore errors
     }
   }
@@ -339,7 +346,7 @@ class BrainwaveBinaural {
     const t = this.ctx.currentTime;
     try {
       if (!this.opts.muted) {
-        this.nodes.outGain.gain.setTargetAtTime(1.0, t, 0.05);
+        this.nodes.outGain.gain.setTargetAtTime(this.opts.volume ?? 1.0, t, 0.05);
       }
     } catch {} // Ignore errors
     this.started = true;
@@ -385,10 +392,17 @@ class BrainwaveBinaural {
     this.updateTimer = setTimeout(() => this.scheduleUpdates(), 100);
   }
 
+  setVolume(v) {
+    this.opts.volume = v;
+    if (this.nodes.outGain && !this.opts.muted) {
+      try { this.nodes.outGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.05); } catch {}
+    }
+  }
+
   setMute(m) {
     this.opts.muted = m;
     if (this.nodes.outGain) {
-      const targetGain = m ? 0 : 1;
+      const targetGain = m ? 0 : (this.opts.volume ?? 1.0);
       try { this.nodes.outGain.gain.setTargetAtTime(targetGain, this.ctx.currentTime, 0.05); } catch {}
     }
   }
@@ -419,6 +433,8 @@ const exportSampleRateInput = q('exportSampleRate');
 const togglePlaybackBtn = q('togglePlaybackBtn');
 const presetDescription = q('presetDescription');
 const beatModeInput = q('beatMode');
+const volumeInput = q('volume');
+const volumeLabel = q('volumeLabel');
 
 // Modal elements
 const renamePresetModal = q('renamePresetModal');
@@ -447,6 +463,7 @@ const defaultPreset = {
   endAction: 'hold',
   exportSampleRate: 44100,
   muted: false,
+  volume: 1.0,
   beatMode: 'isochronic', // Add beatMode
 };
 
@@ -531,6 +548,9 @@ function loadPresetsAndState() {
         }
         if (p.beatMode === undefined) {
             p.beatMode = 'isochronic';
+        }
+        if (p.volume === undefined) {
+            p.volume = 1.0;
         }
     });
   } else {
@@ -783,6 +803,8 @@ function updateUIFromPreset(preset) {
   q('exportSampleRate').value = preset.exportSampleRate;
   q('mute').checked = preset.muted;
   beatModeInput.value = preset.beatMode || 'isochronic'; // Set beat mode
+  volumeInput.value = preset.volume ?? 1.0;
+  volumeLabel.textContent = `${Math.round((preset.volume ?? 1.0) * 100)}%`;
   presetDescription.textContent = preset.description || '';
 
   totalPointsInput.value = preset.totalPoints;
@@ -810,6 +832,7 @@ function updateActivePresetFromUI() {
   currentPreset.exportSampleRate = +q('exportSampleRate').value;
   currentPreset.muted = q('mute').checked;
   currentPreset.beatMode = beatModeInput.value; // Get beat mode
+  currentPreset.volume = +volumeInput.value;
 
   currentPreset.totalPoints = +totalPointsInput.value;
   currentPreset.singlePointHours = +singlePointHoursInput.value;
@@ -849,6 +872,7 @@ const getOpts = () => {
     startBeatHz: currentPreset.startBeatHz,
     stages,
     muted: currentPreset.muted,
+    volume: currentPreset.volume ?? 1.0,
     endAction: currentPreset.endAction,
     exportSampleRate: currentPreset.exportSampleRate,
     beatMode: currentPreset.beatMode || 'isochronic',
@@ -891,6 +915,13 @@ editPointSelector.addEventListener('change', () => {
 q('saveBtn').addEventListener('click', exportToWav);
 
 q('mute').addEventListener('change', e => { if (engine) engine.setMute(e.target.checked); });
+
+volumeInput.addEventListener('input', () => {
+    const vol = +volumeInput.value;
+    volumeLabel.textContent = `${Math.round(vol * 100)}%`;
+    if (engine) engine.setVolume(vol);
+    updateActivePresetFromUI();
+});
 
 renamePresetForm.addEventListener('submit', handleRenamePreset);
 cancelPresetNameBtn.addEventListener('click', closeRenameModal);
