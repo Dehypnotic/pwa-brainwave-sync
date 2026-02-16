@@ -629,6 +629,7 @@ function renderPresetButtons() {
       button.classList.add('active');
     }
     button.textContent = preset.name;
+    button.title = "Double-click or long-press to rename and edit description.";
 
     let pressTimer = null;
     let longPress = false;
