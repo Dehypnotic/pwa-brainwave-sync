@@ -1,6 +1,6 @@
 {
-  "name": "Brainwave Sync 2",
-  "short_name": "BrainwaveSync 2",
+  "name": "Brainwave Sync",
+  "short_name": "BrainwaveSync",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
