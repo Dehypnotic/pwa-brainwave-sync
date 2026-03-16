@@ -1,8 +1,8 @@
 {
   "name": "Brainwave Sync",
   "short_name": "BrainwaveSync",
-  "start_url": "./",
-  "scope": "./",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "orientation": "landscape",
   "lang": "en",
